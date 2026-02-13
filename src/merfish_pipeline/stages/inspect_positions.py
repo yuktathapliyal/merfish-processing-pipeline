@@ -15,10 +15,11 @@ drift_summary.txt
 drift_plot.png  *(optional)*
     Three-panel figure: displacement trend, strip plot per round, and
     FOV x round heatmap.  Only generated when *matplotlib* is importable.
-trajectory_plot.png  *(optional)*
-    3D stage-trajectory plot per z-slice.  Each subplot shows one line per
-    imaging round connecting all FOV positions (x, y, z) in tile order.
-    Defaults to the first 3 z-slices; configurable via
+trajectory_plot.html  *(optional)*
+    Interactive 3D stage-trajectory plot per z-slice (requires plotly).
+    Each subplot shows one line per imaging round connecting all FOV
+    positions (x, y, z) in tile order.  Hover shows FOV number and
+    coordinates.  Defaults to the first 3 z-slices; configurable via
     ``inspect_positions.trajectory_z_slices``.
 """
 
@@ -366,15 +367,18 @@ def _generate_drift_plot(drift_df: pd.DataFrame, output_path: Path) -> bool:
             alpha=0.5,
             s=12,
             edgecolors="none",
+            label=f"Round {int(rnd)}",
         )
 
     # Overlay median markers
-    ax2.plot(rounds, medians, "k_", markersize=18, markeredgewidth=2.5, zorder=5)
+    ax2.plot(rounds, medians, "k_", markersize=18, markeredgewidth=2.5, zorder=5,
+             label="Median")
     ax2.set_xlabel("Round")
     ax2.set_ylabel("Displacement")
     ax2.set_title("Per-FOV Displacement by Round")
     ax2.set_xticks(rounds)
     ax2.grid(axis="y", alpha=0.3)
+    ax2.legend(fontsize=7, loc="upper right", ncol=2)
 
     # --- Panel 3: FOV x Round heatmap ---
     ax3 = axes[2]
@@ -430,12 +434,13 @@ def _generate_trajectory_plot(
     output_path: Path,
     z_slices: Optional[list[int]] = None,
 ) -> bool:
-    """Create 3D trajectory plots showing actual stage positions per z-slice.
+    """Create an interactive 3D trajectory plot (HTML) per z-slice.
 
-    For each z-slice, one subplot is drawn with one line per imaging round.
+    For each z-slice, one 3D subplot shows one line per imaging round.
     Each line connects the (stage_pos_x, stage_pos_y, z_position) of all FOVs
-    in tile_number order, so overlapping lines mean the stage returned to the
-    same positions.  Diverging lines reveal drift.
+    in tile_number order.  Overlapping lines = stable stage; diverging = drift.
+
+    Hover shows FOV number, coordinates, and round for each point.
 
     Parameters
     ----------
@@ -443,7 +448,7 @@ def _generate_trajectory_plot(
         Standardized position data with columns ``round``, ``tile_number``,
         ``stage_pos_x``, ``stage_pos_y``, and ``z_position_0 .. z_position_N``.
     output_path:
-        Where to save the figure.
+        Where to save the HTML file (should end in ``.html``).
     z_slices:
         Which z-slice indices to plot (e.g., ``[0, 1, 2]``).
         Defaults to the first 3 available z-position columns.
@@ -451,11 +456,8 @@ def _generate_trajectory_plot(
     Returns ``True`` if saved successfully.
     """
     try:
-        import matplotlib
-
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
-        from mpl_toolkits.mplot3d import Axes3D  # noqa: F401
+        import plotly.graph_objects as go
+        from plotly.subplots import make_subplots
     except ImportError:
         return False
 
@@ -481,13 +483,24 @@ def _generate_trajectory_plot(
         return False
 
     n_panels = len(selected)
-    fig = plt.figure(figsize=(8 * n_panels, 7))
-
     rounds = sorted(positions_df["round"].unique())
-    cmap = plt.cm.get_cmap("tab10", max(len(rounds), 1))
+
+    # plotly tab10-equivalent colors
+    _COLORS = [
+        "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
+        "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf",
+    ]
+
+    fig = make_subplots(
+        rows=1,
+        cols=n_panels,
+        subplot_titles=[f"Z-slice {int(c.split('_')[-1])}" for c in selected],
+        specs=[[{"type": "scatter3d"}] * n_panels],
+        horizontal_spacing=0.02,
+    )
 
     for panel_idx, z_col in enumerate(selected):
-        ax = fig.add_subplot(1, n_panels, panel_idx + 1, projection="3d")
+        col = panel_idx + 1
         z_index = int(z_col.split("_")[-1])
 
         for rnd_idx, rnd in enumerate(rounds):
@@ -499,43 +512,54 @@ def _generate_trajectory_plot(
             xs = rnd_df["stage_pos_x"].values
             ys = rnd_df["stage_pos_y"].values
             zs = rnd_df[z_col].values
+            fovs = rnd_df["tile_number"].values
 
-            color = cmap(rnd_idx)
+            color = _COLORS[rnd_idx % len(_COLORS)]
 
-            # Line connecting FOVs in tile order
-            ax.plot(
-                xs, ys, zs,
-                color=color,
-                alpha=0.6,
-                linewidth=0.8,
-                label=f"Round {int(rnd)}",
+            hover_text = [
+                f"FOV {int(f)}<br>x={x:.3f}, y={y:.3f}<br>z={z:.3f}"
+                for f, x, y, z in zip(fovs, xs, ys, zs)
+            ]
+
+            # Only show legend for the first panel to avoid duplicates
+            show_legend = panel_idx == 0
+
+            fig.add_trace(
+                go.Scatter3d(
+                    x=xs, y=ys, z=zs,
+                    mode="lines+markers",
+                    name=f"Round {int(rnd)}",
+                    legendgroup=f"Round {int(rnd)}",
+                    showlegend=show_legend,
+                    line=dict(color=color, width=2),
+                    marker=dict(color=color, size=3, opacity=0.8),
+                    hovertext=hover_text,
+                    hoverinfo="text",
+                ),
+                row=1, col=col,
             )
-            # Scatter for individual FOV positions
-            ax.scatter(
-                xs, ys, zs,
-                color=color,
-                alpha=0.7,
-                s=8,
-                depthshade=True,
-            )
 
-        ax.set_xlabel("stage_pos_x", fontsize=9)
-        ax.set_ylabel("stage_pos_y", fontsize=9)
-        ax.set_zlabel(z_col, fontsize=9)
-        ax.set_title(f"Z-slice {z_index}", fontsize=11)
-        ax.tick_params(labelsize=7)
+        # Axis labels
+        fig.update_scenes(
+            dict(
+                xaxis_title="stage_pos_x",
+                yaxis_title="stage_pos_y",
+                zaxis_title=z_col,
+            ),
+            row=1, col=col,
+        )
 
-        if panel_idx == 0:
-            ax.legend(fontsize=7, loc="upper left")
-
-    fig.suptitle(
-        "Stage Trajectory per Z-slice (line per round, points = FOVs)",
-        fontsize=13,
-        fontweight="bold",
+    fig.update_layout(
+        title=dict(
+            text="Stage Trajectory per Z-slice (line per round, points = FOVs)",
+            font=dict(size=16),
+        ),
+        height=700,
+        width=550 * n_panels,
+        legend=dict(font=dict(size=11)),
     )
-    fig.tight_layout(rect=[0, 0, 1, 0.94])
-    fig.savefig(output_path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
+
+    fig.write_html(str(output_path), include_plotlyjs="cdn")
 
     return True
 
@@ -658,15 +682,15 @@ class InspectPositionsStage(PipelineStage):
                 "Drift plot skipped (matplotlib unavailable or no data)."
             )
 
-        # ---- 6. Optional 3D trajectory plot ----
-        trajectory_path = output_dir / "trajectory_plot.png"
+        # ---- 6. Optional 3D trajectory plot (interactive HTML) ----
+        trajectory_path = output_dir / "trajectory_plot.html"
         z_slices = self.config.inspect_positions.trajectory_z_slices
         if _generate_trajectory_plot(positions_df, trajectory_path, z_slices):
             output_files.append(str(trajectory_path))
             self.logger.info("Wrote trajectory plot: %s", trajectory_path)
         else:
             self.logger.info(
-                "Trajectory plot skipped (no z-position data or matplotlib unavailable)."
+                "Trajectory plot skipped (no z-position data or plotly unavailable)."
             )
 
         # ---- Metadata ----
