@@ -244,7 +244,7 @@ def _format_drift_summary(
     lines.append("Overall Drift Statistics")
     lines.append("-" * 50)
     lines.append(f"  Total FOV-round pairs : {len(drift_df)}")
-    lines.append(f"  Rounds analysed       : {sorted(drift_df['round'].unique())}")
+    lines.append(f"  Rounds analysed       : {[int(r) for r in sorted(drift_df['round'].unique())]}")
     lines.append(f"  Unique FOVs           : {drift_df['fov'].nunique()}")
     lines.append("")
     lines.append(f"  Mean displacement     : {drift_df['displacement'].mean():.6f}")
@@ -301,7 +301,12 @@ def _format_drift_summary(
 
 
 def _generate_drift_plot(drift_df: pd.DataFrame, output_path: Path) -> bool:
-    """Create a scatter plot of FOV positions coloured by round.
+    """Create a 3-panel drift analysis figure.
+
+    Panels:
+    1. **Displacement trend** — median + IQR band over rounds.
+    2. **Strip plot** — jittered per-FOV displacement by round.
+    3. **FOV x Round heatmap** — displacement for every (FOV, round) pair.
 
     Returns ``True`` if the plot was saved successfully, ``False`` if
     matplotlib is unavailable or the data is empty.
@@ -311,52 +316,102 @@ def _generate_drift_plot(drift_df: pd.DataFrame, output_path: Path) -> bool:
 
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
+        from matplotlib.colors import Normalize
     except ImportError:
         return False
 
     if drift_df.empty:
         return False
 
-    fig, axes = plt.subplots(1, 2, figsize=(14, 6))
-
     rounds = sorted(drift_df["round"].unique())
+    fovs = sorted(drift_df["fov"].unique())
+
+    fig, axes = plt.subplots(1, 3, figsize=(20, 6))
+
+    # --- Panel 1: Displacement trend (median + IQR) ---
+    ax1 = axes[0]
+    medians, q25s, q75s = [], [], []
+    for rnd in rounds:
+        vals = drift_df[drift_df["round"] == rnd]["displacement"]
+        medians.append(vals.median())
+        q25s.append(vals.quantile(0.25))
+        q75s.append(vals.quantile(0.75))
+
+    ax1.fill_between(rounds, q25s, q75s, alpha=0.25, color="#1f77b4", label="IQR (25-75%)")
+    ax1.plot(rounds, medians, "o-", color="#1f77b4", linewidth=2, markersize=6, label="Median")
+    ax1.set_xlabel("Round")
+    ax1.set_ylabel("Displacement")
+    ax1.set_title("Drift Trend Across Rounds")
+    ax1.set_xticks(rounds)
+    ax1.legend(fontsize=8)
+    ax1.grid(axis="y", alpha=0.3)
+
+    # --- Panel 2: Strip plot (jittered individual FOVs) ---
+    ax2 = axes[1]
+    rng = np.random.default_rng(42)
     cmap = plt.cm.get_cmap("tab10", max(len(rounds), 1))
 
-    # Left panel: delta_x vs delta_y scatter per round
-    ax = axes[0]
     for idx, rnd in enumerate(rounds):
         subset = drift_df[drift_df["round"] == rnd]
-        ax.scatter(
-            subset["delta_x"],
-            subset["delta_y"],
+        jitter = rng.uniform(-0.25, 0.25, size=len(subset))
+        ax2.scatter(
+            rnd + jitter,
+            subset["displacement"],
             c=[cmap(idx)],
-            label=f"Round {rnd}",
-            alpha=0.7,
-            s=20,
+            alpha=0.5,
+            s=12,
             edgecolors="none",
         )
-    ax.axhline(0, color="grey", linewidth=0.5, linestyle="--")
-    ax.axvline(0, color="grey", linewidth=0.5, linestyle="--")
-    ax.set_xlabel("delta_x")
-    ax.set_ylabel("delta_y")
-    ax.set_title("Per-FOV Drift (relative to reference round)")
-    ax.legend(fontsize=7, loc="best")
-    ax.set_aspect("equal", adjustable="datalim")
 
-    # Right panel: displacement distribution per round (box plot)
-    ax2 = axes[1]
-    round_data = [
-        drift_df[drift_df["round"] == rnd]["displacement"].values for rnd in rounds
-    ]
-    bp = ax2.boxplot(round_data, labels=[str(r) for r in rounds], patch_artist=True)
-    for idx, patch in enumerate(bp["boxes"]):
-        patch.set_facecolor(cmap(idx))
-        patch.set_alpha(0.7)
+    # Overlay median markers
+    ax2.plot(rounds, medians, "k_", markersize=18, markeredgewidth=2.5, zorder=5)
     ax2.set_xlabel("Round")
     ax2.set_ylabel("Displacement")
-    ax2.set_title("Displacement Distribution per Round")
+    ax2.set_title("Per-FOV Displacement by Round")
+    ax2.set_xticks(rounds)
+    ax2.grid(axis="y", alpha=0.3)
 
-    fig.suptitle("Position Drift Analysis", fontsize=13, fontweight="bold")
+    # --- Panel 3: FOV x Round heatmap ---
+    ax3 = axes[2]
+
+    # Build a 2D array (FOV x Round)
+    heatmap_data = np.full((len(fovs), len(rounds)), np.nan)
+    fov_to_idx = {f: i for i, f in enumerate(fovs)}
+    rnd_to_idx = {r: i for i, r in enumerate(rounds)}
+    for _, row in drift_df.iterrows():
+        fi = fov_to_idx.get(row["fov"])
+        ri = rnd_to_idx.get(row["round"])
+        if fi is not None and ri is not None:
+            heatmap_data[fi, ri] = row["displacement"]
+
+    vmax = np.nanpercentile(heatmap_data, 95)
+    im = ax3.imshow(
+        heatmap_data,
+        aspect="auto",
+        cmap="YlOrRd",
+        norm=Normalize(vmin=0, vmax=vmax),
+        interpolation="nearest",
+    )
+    ax3.set_xticks(range(len(rounds)))
+    ax3.set_xticklabels([str(r) for r in rounds])
+    ax3.set_xlabel("Round")
+    ax3.set_ylabel(f"FOV (n={len(fovs)})")
+
+    # Show FOV labels on y-axis only if manageable
+    if len(fovs) <= 30:
+        ax3.set_yticks(range(len(fovs)))
+        ax3.set_yticklabels([str(f) for f in fovs], fontsize=6)
+    else:
+        # Show a subset of ticks
+        step = max(1, len(fovs) // 10)
+        tick_positions = list(range(0, len(fovs), step))
+        ax3.set_yticks(tick_positions)
+        ax3.set_yticklabels([str(fovs[i]) for i in tick_positions], fontsize=7)
+
+    ax3.set_title("Displacement by FOV & Round")
+    fig.colorbar(im, ax=ax3, label="Displacement", shrink=0.8)
+
+    fig.suptitle("Position Drift Analysis", fontsize=14, fontweight="bold")
     fig.tight_layout(rect=[0, 0, 1, 0.95])
 
     fig.savefig(output_path, dpi=150, bbox_inches="tight")
