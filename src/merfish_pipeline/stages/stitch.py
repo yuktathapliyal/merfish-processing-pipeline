@@ -287,7 +287,7 @@ class StitchStage(PipelineStage):
 
     def check_outputs_exist(self) -> bool:
         """Return True if at least one mosaic TIFF exists in the output dir."""
-        out = self.get_output_dir()
+        out = self._effective_output_dir()
         if not out.exists():
             return False
         tiffs = list(out.glob("*_mosaic.tiff"))
@@ -296,8 +296,12 @@ class StitchStage(PipelineStage):
     def run(self, dry_run: bool = False) -> StageResult:
         """Execute the stitch stage."""
         start_time = datetime.now()
-        output_dir = self.get_output_dir()
+        using_remapped = self._detect_reregistration()
+        output_dir = self._effective_output_dir()
         output_dir.mkdir(parents=True, exist_ok=True)
+
+        source_label = "reregistered" if using_remapped else "raw"
+        self.logger.info("Stitch mode: %s", source_label)
 
         # ----------------------------------------------------------
         # 1. Read position data
@@ -446,6 +450,7 @@ class StitchStage(PipelineStage):
             status="completed",
             output_files=output_files,
             metadata={
+                "source": source_label,
                 "group_by": group_by,
                 "ir_range": [ir_start, ir_end],
                 "z_range": [z_start, z_end],
@@ -608,8 +613,42 @@ class StitchStage(PipelineStage):
 
         Priority:
         1. Explicit ``stitch.images_dir`` config override.
-        2. ``{raw_data_dir}/{bead_channel_folder}``
+        2. Remapped data directory (if reregistration enabled and output exists).
+        3. ``{raw_data_dir}/{bead_channel_folder}``
         """
         if self.config.stitch.images_dir is not None:
             return Path(self.config.stitch.images_dir)
+
+        if self._detect_reregistration():
+            remapped = Path(self.config.paths.remapped_data_dir)
+            bead_dir = remapped / self.config.raw_data.bead_channel_folder
+            if bead_dir.is_dir():
+                self.logger.info(
+                    "Using remapped bead images from %s (reregistration enabled)",
+                    bead_dir,
+                )
+                return bead_dir
+
         return Path(self.config.paths.raw_data_dir) / self.config.raw_data.bead_channel_folder
+
+    def _detect_reregistration(self) -> bool:
+        """Return True if reregistration was enabled and its output exists."""
+        if not self.config.reregistration.enabled:
+            return False
+        rereg_metadata = (
+            Path(self.config.paths.output_dir) / "reregistration" / "run_metadata.json"
+        )
+        return rereg_metadata.exists()
+
+    def _effective_output_dir(self) -> Path:
+        """Return the output subdirectory based on data source.
+
+        - ``stitch/raw/`` when stitching from original raw data.
+        - ``stitch/reregistered/`` when stitching from remapped data.
+
+        This ensures both sets of mosaics coexist for comparison.
+        """
+        base = self.get_output_dir()
+        if self._detect_reregistration():
+            return base / "reregistered"
+        return base / "raw"
