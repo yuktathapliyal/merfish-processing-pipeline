@@ -257,10 +257,6 @@ class SegmentationStage(PipelineStage):
 
     description = "Run Cellpose cell segmentation on aligned microscopy images"
 
-    # Default parameters when not overridden by upstream config.
-    _DEFAULT_NUCLEI_BIT: int = 0
-    _DEFAULT_TOTAL_BITS: int = 16
-    _DEFAULT_MEDIAN_KERNEL: int = 3
     _DEFAULT_ALIGNED_PATTERN: str = "aligned_images*.tif*"
 
     # ------------------------------------------------------------------
@@ -302,6 +298,9 @@ class SegmentationStage(PipelineStage):
         preprocessed_dir = output_dir / "preprocessed"
 
         seg_cfg = self.config.segmentation
+        nuclei_bit = seg_cfg.nuclei_bit
+        total_bits = seg_cfg.total_bits
+        median_kernel = seg_cfg.median_kernel
         model_type = seg_cfg.model_type
         diameter = seg_cfg.diameter
         batch_size = seg_cfg.batch_size
@@ -339,14 +338,16 @@ class SegmentationStage(PipelineStage):
         if dry_run:
             self.logger.info(
                 "[DRY RUN] Would preprocess and segment %d FOV(s) "
-                "using model_type=%s, diameter=%s, stitch_threshold=%s",
-                len(aligned_images), model_type, diameter, stitch_threshold,
+                "using model_type=%s, diameter=%s, nuclei_bit=%d, total_bits=%d",
+                len(aligned_images), model_type, diameter, nuclei_bit, total_bits,
             )
             return StageResult(
                 status="skipped",
                 metadata={
                     "dry_run": True,
                     "n_fovs": len(aligned_images),
+                    "nuclei_bit": nuclei_bit,
+                    "total_bits": total_bits,
                     "model_type": model_type,
                     "diameter": diameter,
                     "stitch_threshold": stitch_threshold,
@@ -383,9 +384,9 @@ class SegmentationStage(PipelineStage):
             try:
                 volume = _preprocess_volume(
                     tiff_path=tiff_path,
-                    nuclei_bit=self._DEFAULT_NUCLEI_BIT,
-                    total_bits=self._DEFAULT_TOTAL_BITS,
-                    mf_kernel=self._DEFAULT_MEDIAN_KERNEL,
+                    nuclei_bit=nuclei_bit,
+                    total_bits=total_bits,
+                    mf_kernel=median_kernel,
                 )
             except Exception as exc:
                 msg = f"Preprocessing failed for {fov_name}: {exc}"
@@ -476,13 +477,13 @@ class SegmentationStage(PipelineStage):
             result,
             start_time,
             parameters={
+                "nuclei_bit": nuclei_bit,
+                "total_bits": total_bits,
+                "median_kernel": median_kernel,
                 "model_type": model_type,
                 "diameter": diameter,
                 "batch_size": batch_size,
                 "stitch_threshold": stitch_threshold,
-                "nuclei_bit": self._DEFAULT_NUCLEI_BIT,
-                "total_bits": self._DEFAULT_TOTAL_BITS,
-                "median_kernel": self._DEFAULT_MEDIAN_KERNEL,
                 "aligned_pattern": self._DEFAULT_ALIGNED_PATTERN,
             },
         )

@@ -150,6 +150,9 @@ class SegmentationConfig(BaseModel):
     model_config = {"extra": "forbid"}
 
     enabled: bool = False
+    nuclei_bit: int = 0
+    total_bits: int = 16
+    median_kernel: int = 3
     model_type: str = "cpsam"
     diameter: Optional[int] = None
     batch_size: int = 8
