@@ -1,0 +1,34 @@
+# NIKON microscope configuration
+# Used for merFISH experiments on the Nikon Ti2-E platform.
+
+# File naming pattern for raw image TIFFs.
+# Placeholders: {ir} = imaging round, {fov} = field of view, {z} = z-plane
+file_pattern: "merFISH_{ir}_{fov}_{z}.TIFF"
+
+# Stage position file naming and format.
+# Nikon position files are Excel spreadsheets.
+position_file_pattern: "stagePos_Round_{round}.xlsx"
+position_format: "xlsx"
+stage_x_heading: "stage_pos_x"
+stage_y_heading: "stage_pos_y"
+
+# Experiment log file produced by the Nikon acquisition software
+log_file_name: "merlog.txt"
+
+# Optical calibration
+microns_per_pixel: 0.174129
+image_dimensions: [1608, 1608]
+
+# Image orientation corrections applied during remapping.
+# Nikon images require both horizontal and vertical flips.
+flip_horizontal: true
+flip_vertical: true
+transpose: false
+
+# Default bead channel used for fiducial alignment
+default_bead_channel: "473nm, Raw"
+
+# Default MERlin parameter template files (found in templates/)
+default_data_org_template: "XP8054_dataorganization.csv"
+default_analysis_template: "NIKON_Adaptive_analysis.json"
+default_microscope_template: "NIKON_microscope.json"

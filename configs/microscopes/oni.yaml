@@ -1,0 +1,32 @@
+# ONI (Oxford Nanoimaging) microscope configuration
+# Used for merFISH experiments on the ONI Nanoimager platform.
+
+# File naming pattern for raw image TIFFs.
+# Placeholders: {ir} = imaging round, {fov} = field of view, {z} = z-plane
+file_pattern: "merFISH_{ir}_{fov}_{z}.TIFF"
+
+# Stage position file naming and format
+position_file_pattern: "stagePos_Round#{round}.csv"
+position_format: "csv"
+stage_x_heading: "stage_pos_x"
+stage_y_heading: "stage_pos_y"
+
+# Experiment log file produced by the ONI software
+log_file_name: "merfish_log.txt"
+
+# Optical calibration
+microns_per_pixel: 0.1168224
+image_dimensions: [684, 428]
+
+# Image orientation corrections applied during remapping
+flip_horizontal: false
+flip_vertical: false
+transpose: false
+
+# Default bead channel used for fiducial alignment
+default_bead_channel: "488nm, Raw"
+
+# Default MERlin parameter template files (found in templates/)
+default_data_org_template: "XP8054_dataorganization.csv"
+default_analysis_template: "ONI_Adaptive_analysis.json"
+default_microscope_template: "ONI_microscope.json"

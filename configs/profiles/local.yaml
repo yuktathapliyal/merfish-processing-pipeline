@@ -1,0 +1,6 @@
+# Local execution profile
+# Runs all pipeline stages on the current machine using multiprocessing.
+
+execution:
+  mode: "local"
+  max_workers: 8

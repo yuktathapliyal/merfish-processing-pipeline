@@ -1,0 +1,12 @@
+# SLURM cluster execution profile
+# Submits pipeline stages as SLURM batch jobs.
+
+execution:
+  mode: "slurm"
+  max_workers: 32
+  slurm:
+    partition: "upgrade"
+    time: "24:00:00"
+    mem_per_cpu: "4G"
+    cpus_per_task: 32
+  scratch_dir: "/scratch/$USER"

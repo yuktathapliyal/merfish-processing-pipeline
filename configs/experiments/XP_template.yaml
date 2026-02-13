@@ -1,0 +1,134 @@
+# =============================================================================
+# merFISH Processing Pipeline -- Experiment Configuration Template
+# =============================================================================
+#
+# Copy this file and rename it for your experiment, e.g. XP17596.yaml
+# Fill in the [REQUIRED] fields and adjust [OPTIONAL] fields as needed.
+# Fields set to null use defaults from the microscope config.
+#
+# Run with:
+#   merfish-pipe run configs/experiments/XP17596.yaml
+#   merfish-pipe run configs/experiments/XP17596.yaml --stage index
+#   merfish-pipe run configs/experiments/XP17596.yaml --profile slurm
+#
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Experiment identity
+# ---------------------------------------------------------------------------
+experiment:
+  # [REQUIRED] Short unique identifier for this experiment.
+  name: "XP17596"
+  # [REQUIRED] Which microscope: "oni", "nikon", or "andor".
+  # Loads matching config from configs/microscopes/<name>.yaml.
+  microscope: "oni"
+
+# ---------------------------------------------------------------------------
+# Paths
+# ---------------------------------------------------------------------------
+paths:
+  # [REQUIRED] Root directory containing the raw imaging data.
+  raw_data_dir: "/path/to/raw/XP17596"
+  # [REQUIRED] Root directory for all pipeline outputs.
+  output_dir: "/path/to/output/XP17596"
+  # [OPTIONAL] Override derived output subdirectories (defaults shown):
+  # remapped_data_dir: "/path/to/output/XP17596/remapped_data"
+  # merlin_data_dir: "/path/to/output/XP17596/merlin_analysis"
+  # parameters_dir: "/path/to/output/XP17596/parameters"
+
+# ---------------------------------------------------------------------------
+# Raw data settings
+# ---------------------------------------------------------------------------
+raw_data:
+  # [REQUIRED] Name of the bead/fiducial channel subfolder in raw_data_dir.
+  bead_channel_folder: "488nm, Raw"
+  # [OPTIONAL] Override data organization template CSV path or filename.
+  # When null, the default for the microscope is used from templates/.
+  data_org_template: null
+  # [OPTIONAL] Explicit path to the stage-positions file.
+  # When null, auto-detected using the microscope's position_file_pattern.
+  stage_file: null
+  # [OPTIONAL] Andor-specific settings (only needed for microscope: "andor").
+  # andor:
+  #   channel_order: [0, 2, 1]
+
+# ---------------------------------------------------------------------------
+# MERlin configuration
+# ---------------------------------------------------------------------------
+merlin:
+  # [REQUIRED for merlin_config stage] Path or filename of the codebook CSV.
+  # If only a filename, searched in templates/codebooks/.
+  codebook_template: "/path/to/codebooks/C1E1_codebook.csv"
+  # [OPTIONAL] Analysis parameters JSON. Default from microscope config.
+  analysis_template: null
+  # [OPTIONAL] Microscope parameters JSON. Default from microscope config.
+  microscope_template: null
+  # [OPTIONAL] Number of cores for MERlin run script.
+  cores: 100
+
+# ---------------------------------------------------------------------------
+# Pipeline stages
+# ---------------------------------------------------------------------------
+pipeline:
+  # [OPTIONAL] List of stages to run. When empty, stages are controlled by
+  # --stage or --from-stage CLI flags.
+  # Valid stages (in canonical order):
+  #   index, stitch, focus_qc, inspect_positions, reregistration,
+  #   convert, ims_convert, merlin_config, filter_barcodes,
+  #   correlation, segmentation
+  stages: [index, stitch, focus_qc, inspect_positions]
+  # [OPTIONAL] Preview mode -- log what would happen without executing.
+  dry_run: false
+  # [OPTIONAL] Re-run stages even if outputs already exist.
+  force: false
+
+# ---------------------------------------------------------------------------
+# Per-stage configuration (all optional -- defaults are sensible)
+# ---------------------------------------------------------------------------
+
+focus_qc:
+  sigma: 1.0
+  ksize: 3
+
+stitch:
+  # Group mosaics by imaging round ("ir") or z-slice ("z").
+  group_by: "ir"
+  # [OPTIONAL] Restrict to a range of IRs or z-slices: [start, end] (1-indexed).
+  # ir_range: [1, 9]
+  # z_range: [1, 15]
+
+inspect_positions:
+  # [OPTIONAL] Explicit path to microscope log file.
+  log_file: null
+  # [OPTIONAL] Only check specific rounds for drift.
+  # rounds_to_check: [1, 5, 9]
+
+reregistration:
+  # Enable only after inspecting focus_qc results.
+  enabled: false
+  # [OPTIONAL] Override total z-slices per stack (auto-detected if null).
+  # total_z: null
+  # [OPTIONAL] Override target uniform depth (auto-computed if null).
+  # target_z: null
+
+filter_barcodes:
+  # Enable only if reregistration was used.
+  enabled: false
+  # Duplicate detection mode: "any" (union) or "all" (intersection).
+  mode: "any"
+
+correlation:
+  enabled: false
+  # [REQUIRED if enabled] Path to bulk RNA-seq expression CSV.
+  bulk_file: null
+  # [OPTIONAL] Distance thresholds to evaluate.
+  # distance_thresholds: [0.5167, 0.50, 0.45, 0.40, 0.35, 0.30, 0.25]
+
+segmentation:
+  enabled: false
+  # Cellpose model type.
+  model_type: "cpsam"
+  # [OPTIONAL] Expected cell diameter in pixels.
+  # diameter: null
+  batch_size: 8
+  stitch_threshold: 0.5
