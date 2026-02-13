@@ -1,11 +1,12 @@
 __pycache__/
- *.pyc
- *.pyo
- *.egg-info/
- dist/
- build/
- .pytest_cache/
- .ruff_cache/
- *.egg
- .eggs/
- CLAUDE.md
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.ruff_cache/
+*.egg
+.eggs/
+CLAUDE.md
+src/merfish_pipeline.egg-info/
