@@ -354,25 +354,30 @@ raw_data:
 ### 8. `merlin_config`
 
 Generates all parameter files MERlin needs and a shell script to launch MERlin.
-Does NOT run MERlin itself.
+Does NOT run MERlin itself. Files are written to two directories:
 
-**Output:**
+**Parameter files** (saved to `parameters/`, organized by type):
 
 | File | Contents |
 |------|----------|
-| `merlin_config/data_organization.csv` | Frame-to-bit mapping |
-| `merlin_config/microscope.json` | Microscope parameters for MERlin |
-| `merlin_config/positions.csv` | FOV positions for MERlin |
-| `merlin_config/analysis.json` | Analysis task parameters |
-| `merlin_config/codebook.csv` | Barcode codebook |
-| `merlin_config/.merlinenv` | Environment variables for MERlin |
-| `merlin_config/run_merlin.sh` | Launch script |
+| `parameters/dataorganization/data_organization_{name}.csv` | Frame-to-bit mapping (expanded from template) |
+| `parameters/microscope/microscope_{name}.json` | Microscope parameters for MERlin |
+| `parameters/positions/positions_{name}.csv` | FOV positions for MERlin |
+| `parameters/analysis/analysis_{name}.json` | Analysis task parameters |
+| `parameters/codebooks/{codebook}.csv` | Barcode codebook |
+
+**Launch files** (saved to `merlin_analysis/`):
+
+| File | Contents |
+|------|----------|
+| `merlin_analysis/.merlinenv` | Sets DATA_HOME, ANALYSIS_HOME, PARAMETERS_HOME |
+| `merlin_analysis/run_merLIN.sh` | Shell script to invoke MERlin |
 
 After this stage completes, run MERlin externally:
 
 ```bash
-source merlin_config/.merlinenv
-bash merlin_config/run_merlin.sh
+source merlin_analysis/.merlinenv
+bash merlin_analysis/run_merLIN.sh
 ```
 
 **Config:**
@@ -488,8 +493,8 @@ pipeline:
 merfish-pipe run my_experiment.yaml
 
 # 2. Run MERlin externally
-source output/merlin_config/.merlinenv
-bash output/merlin_config/run_merlin.sh
+source output/merlin_analysis/.merlinenv
+bash output/merlin_analysis/run_merLIN.sh
 
 # 3. Run post-MERlin analysis
 merfish-pipe run my_experiment.yaml --stage correlation
@@ -523,8 +528,8 @@ filter_barcodes:
 merfish-pipe run my_experiment.yaml
 
 # 2. Run MERlin externally
-source output/merlin_config/.merlinenv
-bash output/merlin_config/run_merlin.sh
+source output/merlin_analysis/.merlinenv
+bash output/merlin_analysis/run_merLIN.sh
 
 # 3. Filter duplicate barcodes
 merfish-pipe run my_experiment.yaml --stage filter_barcodes
@@ -557,26 +562,36 @@ output_dir/
 │   ├── drift_summary.txt
 │   ├── drift_plot.png
 │   └── trajectory_plot.html
-├── reregistration/           (if enabled)
+├── reregistration/                (if enabled)
 │   └── zmap_new_to_old.csv
-├── remapped_data/            (if reregistration ran)
+├── remapped_data/                 (if reregistration ran)
 │   └── {channel}/*.TIFF
-├── convert/                  (or ims_convert/)
+├── convert/                       (or ims_convert/)
 │   └── merFISH_merged_*.tiff
-├── merlin_config/
-│   ├── data_organization.csv
-│   ├── codebook.csv
-│   ├── run_merlin.sh
-│   └── ...
-├── merlin_analysis/          (created by MERlin)
-│   └── {experiment}/
+├── parameters/                    (MERlin parameter files)
+│   ├── dataorganization/
+│   │   └── data_organization_{name}.csv
+│   ├── microscope/
+│   │   └── microscope_{name}.json
+│   ├── positions/
+│   │   └── positions_{name}.csv
+│   ├── analysis/
+│   │   └── analysis_{name}.json
+│   └── codebooks/
+│       └── {codebook}.csv
+├── merlin_analysis/               (MERlin working directory)
+│   ├── .merlinenv
+│   ├── run_merLIN.sh
+│   └── {experiment}/              (created by MERlin after it runs)
 │       └── ExportBarcodes/barcodes.csv
-├── filter_barcodes/          (if enabled)
+├── merlin_config/                 (stage metadata only)
+│   └── run_metadata.json
+├── filter_barcodes/               (if enabled)
 │   └── barcodes_filtered.csv
-├── correlation/              (if enabled)
+├── correlation/                   (if enabled)
 │   ├── info_{name}.csv
 │   └── correlation_plots.pdf
-└── segmentation/             (if enabled)
+└── segmentation/                  (if enabled)
     ├── preprocessed/
     └── masks/
 ```
