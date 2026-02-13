@@ -13,8 +13,13 @@ drift_summary.txt
     Aggregate statistics (mean / std / max drift per round, plus any
     microscope-log parameters that were parsed).
 drift_plot.png  *(optional)*
-    Scatter plot of FOV positions coloured by round.  Only generated when
-    *matplotlib* is importable.
+    Three-panel figure: displacement trend, strip plot per round, and
+    FOV x round heatmap.  Only generated when *matplotlib* is importable.
+trajectory_plot.png  *(optional)*
+    3D stage-trajectory plot per z-slice.  Each subplot shows one line per
+    imaging round connecting all FOV positions (x, y, z) in tile order.
+    Defaults to the first 3 z-slices; configurable via
+    ``inspect_positions.trajectory_z_slices``.
 """
 
 from __future__ import annotations
@@ -420,6 +425,121 @@ def _generate_drift_plot(drift_df: pd.DataFrame, output_path: Path) -> bool:
     return True
 
 
+def _generate_trajectory_plot(
+    positions_df: pd.DataFrame,
+    output_path: Path,
+    z_slices: Optional[list[int]] = None,
+) -> bool:
+    """Create 3D trajectory plots showing actual stage positions per z-slice.
+
+    For each z-slice, one subplot is drawn with one line per imaging round.
+    Each line connects the (stage_pos_x, stage_pos_y, z_position) of all FOVs
+    in tile_number order, so overlapping lines mean the stage returned to the
+    same positions.  Diverging lines reveal drift.
+
+    Parameters
+    ----------
+    positions_df:
+        Standardized position data with columns ``round``, ``tile_number``,
+        ``stage_pos_x``, ``stage_pos_y``, and ``z_position_0 .. z_position_N``.
+    output_path:
+        Where to save the figure.
+    z_slices:
+        Which z-slice indices to plot (e.g., ``[0, 1, 2]``).
+        Defaults to the first 3 available z-position columns.
+
+    Returns ``True`` if saved successfully.
+    """
+    try:
+        import matplotlib
+
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        from mpl_toolkits.mplot3d import Axes3D  # noqa: F401
+    except ImportError:
+        return False
+
+    if positions_df.empty:
+        return False
+
+    # Discover available z-position columns
+    z_cols = sorted(
+        [c for c in positions_df.columns if c.startswith("z_position_")],
+        key=lambda c: int(c.split("_")[-1]),
+    )
+
+    if not z_cols:
+        return False
+
+    # Determine which z-slices to plot
+    if z_slices is not None:
+        selected = [f"z_position_{i}" for i in z_slices if f"z_position_{i}" in z_cols]
+    else:
+        selected = z_cols[:3]  # default: first 3
+
+    if not selected:
+        return False
+
+    n_panels = len(selected)
+    fig = plt.figure(figsize=(8 * n_panels, 7))
+
+    rounds = sorted(positions_df["round"].unique())
+    cmap = plt.cm.get_cmap("tab10", max(len(rounds), 1))
+
+    for panel_idx, z_col in enumerate(selected):
+        ax = fig.add_subplot(1, n_panels, panel_idx + 1, projection="3d")
+        z_index = int(z_col.split("_")[-1])
+
+        for rnd_idx, rnd in enumerate(rounds):
+            rnd_df = positions_df[positions_df["round"] == rnd].sort_values("tile_number")
+
+            if z_col not in rnd_df.columns or rnd_df[z_col].isna().all():
+                continue
+
+            xs = rnd_df["stage_pos_x"].values
+            ys = rnd_df["stage_pos_y"].values
+            zs = rnd_df[z_col].values
+
+            color = cmap(rnd_idx)
+
+            # Line connecting FOVs in tile order
+            ax.plot(
+                xs, ys, zs,
+                color=color,
+                alpha=0.6,
+                linewidth=0.8,
+                label=f"Round {int(rnd)}",
+            )
+            # Scatter for individual FOV positions
+            ax.scatter(
+                xs, ys, zs,
+                color=color,
+                alpha=0.7,
+                s=8,
+                depthshade=True,
+            )
+
+        ax.set_xlabel("stage_pos_x", fontsize=9)
+        ax.set_ylabel("stage_pos_y", fontsize=9)
+        ax.set_zlabel(z_col, fontsize=9)
+        ax.set_title(f"Z-slice {z_index}", fontsize=11)
+        ax.tick_params(labelsize=7)
+
+        if panel_idx == 0:
+            ax.legend(fontsize=7, loc="upper left")
+
+    fig.suptitle(
+        "Stage Trajectory per Z-slice (line per round, points = FOVs)",
+        fontsize=13,
+        fontweight="bold",
+    )
+    fig.tight_layout(rect=[0, 0, 1, 0.94])
+    fig.savefig(output_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+
+    return True
+
+
 # ---------------------------------------------------------------------------
 # Stage implementation
 # ---------------------------------------------------------------------------
@@ -528,7 +648,7 @@ class InspectPositionsStage(PipelineStage):
 
         output_files = [str(report_path), str(summary_path)]
 
-        # ---- 5. Optional plot ----
+        # ---- 5. Optional drift plot ----
         plot_path = output_dir / "drift_plot.png"
         if _generate_drift_plot(drift_df, plot_path):
             output_files.append(str(plot_path))
@@ -536,6 +656,17 @@ class InspectPositionsStage(PipelineStage):
         else:
             self.logger.info(
                 "Drift plot skipped (matplotlib unavailable or no data)."
+            )
+
+        # ---- 6. Optional 3D trajectory plot ----
+        trajectory_path = output_dir / "trajectory_plot.png"
+        z_slices = self.config.inspect_positions.trajectory_z_slices
+        if _generate_trajectory_plot(positions_df, trajectory_path, z_slices):
+            output_files.append(str(trajectory_path))
+            self.logger.info("Wrote trajectory plot: %s", trajectory_path)
+        else:
+            self.logger.info(
+                "Trajectory plot skipped (no z-position data or matplotlib unavailable)."
             )
 
         # ---- Metadata ----

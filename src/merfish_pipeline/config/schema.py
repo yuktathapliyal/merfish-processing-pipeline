@@ -124,6 +124,7 @@ class InspectPositionsConfig(BaseModel):
     enabled: bool = True
     log_file: Optional[Path] = None
     rounds_to_check: Optional[list[int]] = None
+    trajectory_z_slices: Optional[list[int]] = None  # default: first 3 z-slices
 
 
 class ReregistrationConfig(BaseModel):
