@@ -316,9 +316,15 @@ class FilterBarcodesStage(PipelineStage):
 
         barcodes_path = self._resolve_barcodes_path()
         if barcodes_path is None:
+            xp_name = self.config.experiment.name
+            expected = (
+                Path(self.config.paths.output_dir)
+                / "merlin_analysis" / xp_name / "ExportBarcodes" / "barcodes.csv"
+            )
             errors.append(
-                "Cannot locate barcodes.csv. Provide filter_barcodes.barcodes_file "
-                "in the config or ensure MERlin output directory is set."
+                f"Cannot locate barcodes.csv. Expected at {expected}. "
+                f"Set filter_barcodes.barcodes_file to the correct path "
+                f"if MERlin output is elsewhere."
             )
         elif not barcodes_path.exists():
             errors.append(f"Barcodes file does not exist: {barcodes_path}")
@@ -497,22 +503,22 @@ class FilterBarcodesStage(PipelineStage):
     def _resolve_barcodes_path(self) -> Path | None:
         """Resolve the path to the barcodes CSV.
 
-        Uses the explicit config value if provided; otherwise attempts to
-        locate ``barcodes.csv`` inside the MERlin data directory.
+        Priority:
+        1. Explicit ``filter_barcodes.barcodes_file`` config override.
+        2. Auto-detect at ``{output_dir}/merlin_analysis/{experiment}/ExportBarcodes/barcodes.csv``.
         """
         explicit = self.config.filter_barcodes.barcodes_file
         if explicit is not None:
             return Path(explicit)
 
-        # Auto-detect from MERlin output directory
-        merlin_dir = getattr(self.config.paths, "merlin_data_dir", None)
-        if merlin_dir is not None:
-            candidate = Path(merlin_dir) / "barcodes.csv"
-            if candidate.exists():
-                return candidate
-            # Some MERlin versions nest under a subfolder
-            for child in Path(merlin_dir).glob("**/barcodes.csv"):
-                return child
+        # Auto-detect from MERlin analysis output
+        output_dir = Path(self.config.paths.output_dir)
+        xp_name = self.config.experiment.name
+        candidate = (
+            output_dir / "merlin_analysis" / xp_name / "ExportBarcodes" / "barcodes.csv"
+        )
+        if candidate.exists():
+            return candidate
 
         return None
 
