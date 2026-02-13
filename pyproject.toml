@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "merfish-pipeline"
+version = "0.1.0"
+description = "Standardized merFISH processing pipeline for ANDOR, NIKON, and ONI microscopes"
+requires-python = ">=3.10"
+dependencies = [
+    "click>=8.0",
+    "pydantic>=2.0",
+    "pyyaml>=6.0",
+    "numpy>=1.24",
+    "pandas>=2.0",
+    "tifffile>=2023.1",
+    "h5py>=3.8",
+    "opencv-python-headless>=4.7",
+    "scikit-image>=0.20",
+    "matplotlib>=3.7",
+    "seaborn>=0.12",
+    "tqdm>=4.65",
+    "openpyxl>=3.1",
+]
+
+[project.optional-dependencies]
+segmentation = ["cellpose>=3.0"]
+dev = ["pytest>=7.0", "pytest-cov>=4.0", "ruff>=0.1"]
+all = ["cellpose>=3.0"]
+
+[project.scripts]
+merfish-pipe = "merfish_pipeline.cli.main:cli"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
