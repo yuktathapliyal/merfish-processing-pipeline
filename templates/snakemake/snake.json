@@ -1,0 +1,6 @@
+{
+    "cluster": "sbatch --mem-per-cpu=<mem> -p upgrade -t <time> -c 32 --mail-user=<yourEmailAddress> --mail-type=FAIL,END -e /path/%j.stderr.txt",
+    "latency_wait": 500,
+    "scheduler": "ilp",
+    "restart_times": 1
+}
