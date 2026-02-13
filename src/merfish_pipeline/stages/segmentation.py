@@ -267,7 +267,17 @@ class SegmentationStage(PipelineStage):
         """Check that aligned-image inputs exist and are accessible."""
         errors: list[str] = []
 
-        input_dir = self._resolve_input_dir()
+        seg_cfg = self.config.segmentation
+        if seg_cfg.aligned_images_dir is None:
+            errors.append(
+                "segmentation.aligned_images_dir is required. "
+                "Set it to the MERlin output directory containing "
+                "aligned_images*.tif files "
+                "(e.g. {merlin_analysis}/{experiment}/FiducialCorrelationWarp/)."
+            )
+            return errors
+
+        input_dir = Path(seg_cfg.aligned_images_dir)
         if not input_dir.exists():
             errors.append(f"Aligned images directory does not exist: {input_dir}")
         elif not input_dir.is_dir():
@@ -495,17 +505,8 @@ class SegmentationStage(PipelineStage):
     # ------------------------------------------------------------------
 
     def _resolve_input_dir(self) -> Path:
-        """Resolve the directory containing aligned-image TIFF stacks.
-
-        Looks for a MERlin output ``images`` subdirectory under the
-        configured ``merlin_data_dir``.  If that does not exist, falls
-        back to ``merlin_data_dir`` itself.
-        """
-        merlin_dir = Path(self.config.paths.merlin_data_dir)
-        images_subdir = merlin_dir / "images"
-        if images_subdir.is_dir():
-            return images_subdir
-        return merlin_dir
+        """Return the configured aligned-images directory."""
+        return Path(self.config.segmentation.aligned_images_dir)
 
     @staticmethod
     def _init_cellpose_model(models_module: Any, model_type: str) -> Any:

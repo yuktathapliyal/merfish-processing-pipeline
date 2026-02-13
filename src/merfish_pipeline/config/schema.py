@@ -150,6 +150,7 @@ class SegmentationConfig(BaseModel):
     model_config = {"extra": "forbid"}
 
     enabled: bool = False
+    aligned_images_dir: Optional[Path] = None  # required when enabled
     nuclei_bit: int = 0
     total_bits: int = 16
     median_kernel: int = 3
