@@ -1,11 +1,11 @@
-"""``index`` stage — scan raw data and produce manifest + normalized positions.
+"""``index`` stage — scan raw data and produce manifest + standardized positions.
 
 This stage creates two canonical files consumed by all downstream stages:
 
 1. ``manifest.csv`` — one row per raw image, with columns:
    ``round, fov, z_slice, channel, wavelength, abs_path, file_size, image_shape``
 
-2. ``positions.normalized.csv`` — microscope-agnostic position data, with columns:
+2. ``positions.standardized.csv`` — microscope-agnostic position data, with columns:
    ``round, tile_number, stage_pos_x, stage_pos_y, z_position_0, ..., z_position_N``
 """
 
@@ -22,7 +22,7 @@ from merfish_pipeline.stages.registry import register_stage
 
 @register_stage("index")
 class IndexStage(PipelineStage):
-    """Scan raw data → ``manifest.csv`` + ``positions.normalized.csv``."""
+    """Scan raw data → ``manifest.csv`` + ``positions.standardized.csv``."""
 
     description = "Index raw data and generate manifest"
 
@@ -42,7 +42,7 @@ class IndexStage(PipelineStage):
     def check_outputs_exist(self) -> bool:
         out = self.get_output_dir()
         manifest = out / "manifest.csv"
-        positions = out / "positions.normalized.csv"
+        positions = out / "positions.standardized.csv"
         return manifest.exists() and positions.exists()
 
     def run(self, dry_run: bool = False) -> StageResult:
@@ -79,11 +79,11 @@ class IndexStage(PipelineStage):
         manifest_df.to_csv(manifest_path, index=False)
         self.logger.info("Wrote manifest: %s (%d rows)", manifest_path, len(manifest_df))
 
-        # --- Build normalized positions ---
+        # --- Build standardized positions ---
         self.logger.info("Reading position data...")
         positions_df = adapter.read_positions(raw_dir)
 
-        positions_path = output_dir / "positions.normalized.csv"
+        positions_path = output_dir / "positions.standardized.csv"
         if not positions_df.empty:
             positions_df.to_csv(positions_path, index=False)
             self.logger.info(

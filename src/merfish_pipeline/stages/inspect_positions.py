@@ -1,6 +1,6 @@
 """``inspect_positions`` stage -- analyse position drift and microscope logs.
 
-Reads the normalised position data produced by the ``index`` stage and
+Reads the standardized position data produced by the ``index`` stage and
 computes per-round, per-FOV drift statistics.  Optionally parses the
 microscope log file for laser power, exposure, and z-stack parameters.
 
@@ -380,7 +380,7 @@ class InspectPositionsStage(PipelineStage):
     # ------------------------------------------------------------------
 
     def validate_inputs(self) -> list[str]:
-        """Check that the normalised positions file from the index stage exists."""
+        """Check that the standardized positions file from the index stage exists."""
         errors: list[str] = []
 
         positions_path = self._positions_path()
@@ -511,8 +511,8 @@ class InspectPositionsStage(PipelineStage):
     # ------------------------------------------------------------------
 
     def _positions_path(self) -> Path:
-        """Return the expected path to the normalised positions file."""
-        return Path(self.config.paths.output_dir) / "index" / "positions.normalized.csv"
+        """Return the expected path to the standardized positions file."""
+        return Path(self.config.paths.output_dir) / "index" / "positions.standardized.csv"
 
     def _resolve_log_path(self) -> Optional[Path]:
         """Determine the microscope log path from config.

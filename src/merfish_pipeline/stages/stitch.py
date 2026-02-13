@@ -2,7 +2,7 @@
 
 For each imaging round (or z-slice, depending on configuration), this stage:
 
-1. Reads the normalized position data produced by the ``index`` stage.
+1. Reads the standardized position data produced by the ``index`` stage.
 2. Locates bead-channel TIFF files in the raw data directory.
 3. Groups images by imaging round or z-slice.
 4. For each group, computes tile placement from stage positions (micron
@@ -597,11 +597,11 @@ class StitchStage(PipelineStage):
 
         Priority:
         1. Explicit ``stitch.position_file`` config override.
-        2. Normalized positions produced by the ``index`` stage.
+        2. Standardized positions produced by the ``index`` stage.
         """
         if self.config.stitch.position_file is not None:
             return Path(self.config.stitch.position_file)
-        return Path(self.config.paths.output_dir) / "index" / "positions.normalized.csv"
+        return Path(self.config.paths.output_dir) / "index" / "positions.standardized.csv"
 
     def _resolve_images_dir(self) -> Path:
         """Resolve the bead images directory.

@@ -582,8 +582,8 @@ class MerlinConfigStage(PipelineStage):
         return Path(self.config.paths.output_dir) / "index" / "manifest.csv"
 
     def _positions_path(self) -> Path:
-        """Path to the normalised positions CSV produced by the index stage."""
-        return Path(self.config.paths.output_dir) / "index" / "positions.normalized.csv"
+        """Path to the standardized positions CSV produced by the index stage."""
+        return Path(self.config.paths.output_dir) / "index" / "positions.standardized.csv"
 
     def _resolve_data_org_template(self) -> Path:
         """Resolve the data-organisation template path.

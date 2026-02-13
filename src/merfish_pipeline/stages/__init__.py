@@ -7,7 +7,7 @@ base
 registry
     Stage name -> class mapping via @register_stage decorator.
 index
-    Scan raw data and produce manifest + normalized positions.
+    Scan raw data and produce manifest + standardized positions.
 stitch
     Build tile mosaics from bead-channel images.
 focus_qc
