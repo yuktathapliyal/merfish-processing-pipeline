@@ -87,6 +87,21 @@ def _resolve_template(path: Path | str, templates_dir: Path | None = None) -> Pa
     )
 
 
+def _extract_base_frame(value: object) -> int:
+    """Extract 1-based frame from an expanded array string like ``[2 5 8 ...]``.
+
+    The first element of the array equals ``original_frame - 1``, so we add 1
+    to recover the original 1-based value.
+    """
+    inner = str(value).strip().strip("[]").split()
+    return int(inner[0]) + 1
+
+
+def _extract_base_fiducial(value: object) -> int:
+    """Convert a 0-based fiducialFrame back to 1-based."""
+    return int(value) + 1
+
+
 def _expand_data_organization(
     template_df: pd.DataFrame,
     n_z: int,
@@ -95,18 +110,20 @@ def _expand_data_organization(
     """Expand a data-organization template into the full MERlin format.
 
     The template CSV has one row per bit/readout.  The ``frame`` and
-    ``fiducialFrame`` columns contain 1-based single integer values.  This
-    function expands them:
+    ``fiducialFrame`` columns may contain either:
+
+    * **Scalar** 1-based integers (non-expanded template), or
+    * **Array strings** like ``[2 5 8 ...]`` (pre-expanded for a different
+      experiment's z-count).
+
+    In both cases this function (re-)expands them for the given *n_z* and
+    *n_channels*:
 
     * ``frame`` becomes a numpy-style array string:
       ``[f0 f1 f2 ...]`` where ``f_z = (original_frame - 1) + z * n_channels``
       for each *z* in ``range(n_z)``.
     * ``zPos`` becomes ``[0. 1. 2. ... (n_z - 1).]``
     * ``fiducialFrame`` is converted from 1-indexed to 0-indexed (single int).
-
-    If the template already contains array-style values (detected by the
-    presence of ``[`` in the string representation), the data is returned
-    as-is with no expansion.
 
     Parameters
     ----------
@@ -124,11 +141,12 @@ def _expand_data_organization(
     """
     df = template_df.copy()
 
-    # Detect whether expansion is needed by checking the first frame value.
+    # If the template is pre-expanded (array-style frame values), normalise
+    # back to scalar 1-based integers so the expansion below works correctly.
     first_frame = str(df["frame"].iloc[0]).strip()
     if "[" in first_frame:
-        # Already expanded -- nothing to do.
-        return df
+        df["frame"] = df["frame"].apply(_extract_base_frame)
+        df["fiducialFrame"] = df["fiducialFrame"].apply(_extract_base_fiducial)
 
     # Build the zPos array string (shared by all rows).
     z_positions = np.arange(n_z, dtype=float)
