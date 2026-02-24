@@ -47,6 +47,11 @@ from typing import Any
 
 import numpy as np
 
+try:
+    import cv2
+except ImportError:
+    cv2 = None  # checked in validate_inputs()
+
 from merfish_pipeline.io.tiff_io import read_tiff, write_tiff
 from merfish_pipeline.stages.base import PipelineStage, StageResult
 from merfish_pipeline.stages.registry import register_stage
@@ -154,7 +159,11 @@ def _preprocess_volume(
     ValueError
         If the TIFF shape is incompatible with the expected layout.
     """
-    import cv2
+    if cv2 is None:
+        raise RuntimeError(
+            "OpenCV (cv2) is required for segmentation preprocessing. "
+            "Install it with: pip install opencv-python-headless"
+        )
 
     if exclude_bits is None:
         exclude_bits = []
@@ -240,6 +249,8 @@ def _segment_volume(
     diameter: int | None,
     batch_size: int,
     stitch_threshold: float,
+    flow_threshold: float = 0.4,
+    cellprob_threshold: float = 0.0,
 ) -> np.ndarray:
     """Run Cellpose 2D+stitch segmentation on a preprocessed volume.
 
@@ -256,6 +267,11 @@ def _segment_volume(
         Number of images processed per GPU batch.
     stitch_threshold:
         IoU overlap threshold used to stitch masks across z-slices.
+    flow_threshold:
+        Cellpose flow error threshold.  Lower values produce fewer,
+        higher-confidence cells.
+    cellprob_threshold:
+        Minimum cell probability to accept a pixel as belonging to a cell.
 
     Returns
     -------
@@ -272,6 +288,8 @@ def _segment_volume(
         do_3D=False,
         stitch_threshold=stitch_threshold,
         batch_size=batch_size,
+        flow_threshold=flow_threshold,
+        cellprob_threshold=cellprob_threshold,
     )
 
     # Ensure output is uint16 for compact storage.
@@ -301,6 +319,40 @@ class SegmentationStage(PipelineStage):
         errors: list[str] = []
 
         seg_cfg = self.config.segmentation
+
+        # --- Config consistency checks ---
+        if seg_cfg.mode == "2d" and seg_cfg.reference_z_slice is None:
+            errors.append(
+                "segmentation.mode is '2d' but reference_z_slice is not set. "
+                "Specify which z-slice to segment."
+            )
+
+        if seg_cfg.nuclei_bit >= seg_cfg.total_bits:
+            errors.append(
+                f"segmentation.nuclei_bit ({seg_cfg.nuclei_bit}) must be less "
+                f"than total_bits ({seg_cfg.total_bits})."
+            )
+
+        # --- Check cv2 availability ---
+        try:
+            import cv2  # noqa: F401
+        except ImportError:
+            errors.append(
+                "OpenCV (cv2) is not installed. "
+                "Install it with: pip install opencv-python-headless"
+            )
+
+        # --- Check cellpose availability ---
+        try:
+            import cellpose  # noqa: F401
+        except ImportError:
+            errors.append(
+                "cellpose is not installed. Install it with: "
+                "pip install 'merfish-pipeline[segmentation]' or "
+                "pip install cellpose"
+            )
+
+        # --- Aligned images directory ---
         if seg_cfg.aligned_images_dir is None:
             errors.append(
                 "segmentation.aligned_images_dir is required. "
@@ -348,6 +400,8 @@ class SegmentationStage(PipelineStage):
         diameter = seg_cfg.diameter
         batch_size = seg_cfg.batch_size
         stitch_threshold = seg_cfg.stitch_threshold
+        flow_threshold = seg_cfg.flow_threshold
+        cellprob_threshold = seg_cfg.cellprob_threshold
 
         # Segmentation mode: "2d" = single reference slice, "3d" = all slices
         single_slice_mode = seg_cfg.mode == "2d"
@@ -413,6 +467,8 @@ class SegmentationStage(PipelineStage):
                     "model_type": model_type,
                     "diameter": diameter,
                     "stitch_threshold": stitch_threshold,
+                    "flow_threshold": flow_threshold,
+                    "cellprob_threshold": cellprob_threshold,
                     "single_slice_mode": single_slice_mode,
                     "reference_z_index": z_index,
                 },
@@ -475,6 +531,8 @@ class SegmentationStage(PipelineStage):
                     diameter=diameter,
                     batch_size=batch_size,
                     stitch_threshold=stitch_threshold,
+                    flow_threshold=flow_threshold,
+                    cellprob_threshold=cellprob_threshold,
                 )
             except Exception as exc:
                 msg = f"Segmentation failed for {fov_name}: {exc}"
@@ -536,6 +594,8 @@ class SegmentationStage(PipelineStage):
                     "diameter": diameter,
                     "batch_size": batch_size,
                     "stitch_threshold": stitch_threshold,
+                    "flow_threshold": flow_threshold,
+                    "cellprob_threshold": cellprob_threshold,
                     "single_slice_mode": single_slice_mode,
                     "reference_z_index": z_index,
                     "fov_errors": fov_errors,
@@ -556,6 +616,8 @@ class SegmentationStage(PipelineStage):
                 "diameter": diameter,
                 "batch_size": batch_size,
                 "stitch_threshold": stitch_threshold,
+                "flow_threshold": flow_threshold,
+                "cellprob_threshold": cellprob_threshold,
                 "single_slice_mode": single_slice_mode,
                 "reference_z_index": z_index,
                 "aligned_pattern": self._DEFAULT_ALIGNED_PATTERN,

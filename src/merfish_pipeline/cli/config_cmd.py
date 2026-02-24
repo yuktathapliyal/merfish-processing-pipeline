@@ -182,6 +182,8 @@ def _build_template(microscope: str) -> dict:
             "median_kernel": 3,
             "batch_size": 8,
             "stitch_threshold": 0.5,
+            "flow_threshold": 0.4,
+            "cellprob_threshold": 0.0,
             "reference_z_slice": None,
             "z_indexing": 1,
         },

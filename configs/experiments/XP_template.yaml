@@ -159,3 +159,5 @@ segmentation:
   median_kernel: 3            # median filter kernel size (odd integer)
   batch_size: 8               # GPU batch size
   stitch_threshold: 0.5       # IoU threshold for stitching masks across z (3D mode)
+  flow_threshold: 0.4         # Cellpose flow error threshold (lower = stricter)
+  cellprob_threshold: 0.0     # minimum cell probability to accept a pixel
