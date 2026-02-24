@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import sys
+from datetime import datetime
 
 # Print immediately so the user knows the tool is starting, before any
 # heavy imports (pydantic, yaml, etc.) that can take 30-60s on cold servers.
-print("Starting merfish-pipe...", flush=True, file=sys.stderr)
+print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}] Starting merfish-pipe...", flush=True, file=sys.stderr)
 
 import click  # noqa: E402
 

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import sys
-import time
 from pathlib import Path
 
 import click
@@ -61,8 +60,6 @@ def run(
 
     EXPERIMENT is the path to the experiment YAML config file.
     """
-    run_start = time.monotonic()
-
     # --- Build CLI overrides ---
     overrides: dict = {}
     if workers is not None:
@@ -151,14 +148,12 @@ def run(
     skipped = sum(1 for r in reports if r["status"] == "skipped")
     failed = sum(1 for r in reports if r["status"] == "failed")
 
-    elapsed = time.monotonic() - run_start
     logger.info(
         "Pipeline finished: %d completed, %d skipped, %d failed.",
         completed,
         skipped,
         failed,
     )
-    click.echo(f"Total time: {elapsed:.1f}s", err=True)
 
     if failed:
         sys.exit(1)
