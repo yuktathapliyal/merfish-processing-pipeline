@@ -177,7 +177,9 @@ def _preprocess_volume(
     # So the flat 3-D shape is (bits*Z, Y, X) with bits changing slowest.
     # We reshape to (bits, Z, Y, X) then transpose to (Z, bits, Y, X).
     if raw.ndim == 4:
-        n_z, n_bits, h, w = raw.shape
+        # MERlin writes 4-D as (bits, Z, Y, X); transpose to (Z, bits, Y, X)
+        n_bits, n_z, h, w = raw.shape
+        raw = raw.transpose(1, 0, 2, 3)
     elif raw.ndim == 3:
         n_frames, h, w = raw.shape
         if total_bits <= 0:

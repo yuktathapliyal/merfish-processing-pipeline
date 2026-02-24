@@ -7,23 +7,46 @@
 git clone <repo-url>
 cd merfish-processing-pipeline
 
-# Install in editable mode
+# Install in editable mode (core pipeline, no segmentation)
 pip install -e .
+```
 
-# With cell segmentation support (cellpose + PyTorch, GPU recommended)
+### Segmentation (cellpose) setup
+
+**Local machine with GPU (Windows/Linux):**
+
+```bash
+# Install PyTorch with CUDA (check your CUDA version with nvidia-smi)
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+
+# Install cellpose and pipeline segmentation extra
 pip install -e ".[segmentation]"
 
-# If pip fails to build fastremap (common on servers with old GCC):
-conda install -c conda-forge cellpose
+# Verify GPU is available
+python -c "import torch; print(torch.cuda.is_available())"  # should print True
+```
 
-# CPU-only server (smaller download, no CUDA):
+**Server (CPU only):**
+
+```bash
+# Install CPU-only PyTorch (much smaller download)
 pip install torch --index-url https://download.pytorch.org/whl/cpu
 pip install -e ".[segmentation]"
+```
 
-# With interactive plots (plotly)
+**If pip fails to build fastremap** (common on servers with old GCC):
+
+```bash
+conda install -c conda-forge cellpose
+```
+
+### Optional extras
+
+```bash
+# Interactive trajectory plots (plotly)
 pip install -e ".[viz]"
 
-# Everything
+# Everything (segmentation + viz)
 pip install -e ".[all]"
 ```
 
