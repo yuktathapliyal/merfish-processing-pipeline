@@ -8,15 +8,6 @@ from pathlib import Path
 import click
 
 from merfish_pipeline.config.defaults import VALID_STAGES
-from merfish_pipeline.config.loader import load_pipeline_config
-from merfish_pipeline.exceptions import StageError
-from merfish_pipeline.execution.runner import resolve_stages, run_pipeline
-from merfish_pipeline.execution.slurm import generate_slurm_script
-from merfish_pipeline.execution.state import PipelineState
-from merfish_pipeline.logging_config import setup_logging
-
-# Ensure all stages are registered before CLI starts.
-import merfish_pipeline.stages  # noqa: F401
 
 
 @click.command()
@@ -69,6 +60,8 @@ def run(
 
     EXPERIMENT is the path to the experiment YAML config file.
     """
+    from merfish_pipeline.cli.utils import Spinner
+
     # --- Build CLI overrides ---
     overrides: dict = {}
     if workers is not None:
@@ -82,11 +75,24 @@ def run(
     if force:
         overrides.setdefault("pipeline", {})["force"] = True
 
-    # --- Load config ---
-    try:
-        config = load_pipeline_config(experiment, profile=profile, overrides=overrides or None)
-    except Exception as exc:
-        raise click.ClickException(f"Config error: {exc}") from exc
+    # --- Load config and heavy dependencies (with spinner for feedback) ---
+    with Spinner("Loading pipeline"):
+        from merfish_pipeline.config.loader import load_pipeline_config
+        from merfish_pipeline.exceptions import StageError
+        from merfish_pipeline.execution.runner import resolve_stages, run_pipeline
+        from merfish_pipeline.execution.slurm import generate_slurm_script
+        from merfish_pipeline.execution.state import PipelineState
+        from merfish_pipeline.logging_config import setup_logging
+
+        # Ensure all stages are registered.
+        import merfish_pipeline.stages  # noqa: F401
+
+        try:
+            config = load_pipeline_config(
+                experiment, profile=profile, overrides=overrides or None
+            )
+        except Exception as exc:
+            raise click.ClickException(f"Config error: {exc}") from exc
 
     # --- Setup logging ---
     log_level = "DEBUG" if verbose else "INFO"
