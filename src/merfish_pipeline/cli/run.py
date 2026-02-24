@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import time
 from pathlib import Path
 
 import click
@@ -60,7 +61,7 @@ def run(
 
     EXPERIMENT is the path to the experiment YAML config file.
     """
-    from merfish_pipeline.cli.utils import StatusBanner
+    run_start = time.monotonic()
 
     # --- Build CLI overrides ---
     overrides: dict = {}
@@ -75,24 +76,23 @@ def run(
     if force:
         overrides.setdefault("pipeline", {})["force"] = True
 
-    # --- Load config and heavy dependencies (with spinner for feedback) ---
-    with StatusBanner("Loading pipeline"):
-        from merfish_pipeline.config.loader import load_pipeline_config
-        from merfish_pipeline.exceptions import StageError
-        from merfish_pipeline.execution.runner import resolve_stages, run_pipeline
-        from merfish_pipeline.execution.slurm import generate_slurm_script
-        from merfish_pipeline.execution.state import PipelineState
-        from merfish_pipeline.logging_config import setup_logging
+    # --- Load config and heavy dependencies ---
+    from merfish_pipeline.config.loader import load_pipeline_config
+    from merfish_pipeline.exceptions import StageError
+    from merfish_pipeline.execution.runner import resolve_stages, run_pipeline
+    from merfish_pipeline.execution.slurm import generate_slurm_script
+    from merfish_pipeline.execution.state import PipelineState
+    from merfish_pipeline.logging_config import setup_logging
 
-        # Ensure all stages are registered.
-        import merfish_pipeline.stages  # noqa: F401
+    # Ensure all stages are registered.
+    import merfish_pipeline.stages  # noqa: F401
 
-        try:
-            config = load_pipeline_config(
-                experiment, profile=profile, overrides=overrides or None
-            )
-        except Exception as exc:
-            raise click.ClickException(f"Config error: {exc}") from exc
+    try:
+        config = load_pipeline_config(
+            experiment, profile=profile, overrides=overrides or None
+        )
+    except Exception as exc:
+        raise click.ClickException(f"Config error: {exc}") from exc
 
     # --- Setup logging ---
     log_level = "DEBUG" if verbose else "INFO"
@@ -151,12 +151,14 @@ def run(
     skipped = sum(1 for r in reports if r["status"] == "skipped")
     failed = sum(1 for r in reports if r["status"] == "failed")
 
+    elapsed = time.monotonic() - run_start
     logger.info(
         "Pipeline finished: %d completed, %d skipped, %d failed.",
         completed,
         skipped,
         failed,
     )
+    click.echo(f"Total time: {elapsed:.1f}s", err=True)
 
     if failed:
         sys.exit(1)
