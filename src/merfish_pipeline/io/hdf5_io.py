@@ -40,16 +40,29 @@ def _open(path: Path | str) -> h5py.File:
 
 
 def _attr_str(group: h5py.Group | h5py.Dataset, key: str, default: str = "") -> str:
-    """Read an HDF5 attribute and decode to *str* if it is bytes."""
+    """Read an HDF5 attribute and decode to *str* if it is bytes.
+
+    IMS files store numeric attributes as numpy arrays of individual bytes
+    (e.g. ``array([b'-', b'1', b'2', b'7', b'0', b'3'])`` for ``-12703``).
+    All bytes must be joined before decoding.
+    """
     val = group.attrs.get(key, default)
     if isinstance(val, bytes):
         return val.decode("utf-8", errors="replace")
     if isinstance(val, np.ndarray):
-        # Some IMS writers store single-element byte arrays.
         try:
-            return val.flat[0].decode("utf-8", errors="replace")
-        except (AttributeError, UnicodeDecodeError):
-            return str(val.flat[0])
+            if val.dtype.kind == "S":  # byte strings
+                return b"".join(val).decode("utf-8", errors="replace")
+            elif val.dtype.kind == "U":  # unicode strings
+                return "".join(val)
+            else:
+                # Array of integers (character codes)
+                return "".join(
+                    chr(x) if isinstance(x, (int, np.integer)) else str(x)
+                    for x in val
+                )
+        except (AttributeError, UnicodeDecodeError, TypeError):
+            return str(val)
     return str(val) if val is not default else default
 
 
@@ -299,7 +312,15 @@ def extract_stage_positions(path: str | Path) -> dict[str, Any]:
         ext_min_z = _attr_float(img_info, "ExtMin2", 0)
         ext_max_z = _attr_float(img_info, "ExtMax2", 0)
 
+        # Prefer the Z attribute from image metadata over the (potentially
+        # padded) array dimension — matches reference extractAndorPositions.py.
         n_z = _count_z_slices(f, channel=0)
+        z_attr = _attr_str(img_info, "Z", "")
+        if z_attr:
+            try:
+                n_z = int(float(z_attr))
+            except (ValueError, TypeError):
+                pass  # keep array-based count
 
     if n_z > 1:
         z_positions = list(np.linspace(ext_min_z, ext_max_z, n_z))
