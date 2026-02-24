@@ -118,6 +118,19 @@ def read_ims_metadata(path: str | Path) -> dict[str, Any]:
         n_channels = _count_channels(f)
         n_z_slices = _count_z_slices(f, channel=0) if n_channels > 0 else 0
 
+        # Prefer ImageSizeZ metadata over array shape: IMS arrays may be
+        # padded beyond the actual number of acquired z-slices (e.g. array
+        # shape = 48 but only 41 slices were acquired).
+        if n_channels > 0:
+            ch0_group = f.get(f"{_DS_ROOT}/Channel 0")
+            if ch0_group is not None:
+                image_size_z = _attr_str(ch0_group, "ImageSizeZ", "")
+                if image_size_z:
+                    try:
+                        n_z_slices = int(image_size_z)
+                    except (ValueError, TypeError):
+                        pass  # keep array-based count
+
         # --- image shape (height, width) from actual data -----------------
         image_shape: tuple[int, int] = (0, 0)
         ds = f.get(f"{_DS_ROOT}/Channel 0/Data")
