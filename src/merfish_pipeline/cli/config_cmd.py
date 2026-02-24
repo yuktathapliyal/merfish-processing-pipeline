@@ -73,11 +73,11 @@ def validate(experiment: Path, profile: str) -> None:
 
     Reports errors in the config and exits with code 1 on failure.
     """
-    from merfish_pipeline.cli.utils import Spinner
+    from merfish_pipeline.cli.utils import StatusBanner
     from merfish_pipeline.config.loader import load_pipeline_config
 
     try:
-        with Spinner("Validating config"):
+        with StatusBanner("Validating config"):
             cfg = load_pipeline_config(experiment, profile=profile)
     except Exception as exc:
         click.echo(f"INVALID: {exc}", err=True)
@@ -107,11 +107,11 @@ def show(experiment: Path, profile: str, as_json: bool) -> None:
 
     Loads all three layers, merges them, and prints the result.
     """
-    from merfish_pipeline.cli.utils import Spinner
+    from merfish_pipeline.cli.utils import StatusBanner
     from merfish_pipeline.config.loader import load_pipeline_config
 
     try:
-        with Spinner("Loading config"):
+        with StatusBanner("Loading config"):
             cfg = load_pipeline_config(experiment, profile=profile)
     except Exception as exc:
         click.echo(f"Error: {exc}", err=True)

@@ -2,51 +2,36 @@
 
 from __future__ import annotations
 
-import itertools
-import sys
-import threading
 import time
 
+import click
 
-class Spinner:
-    """Simple threaded spinner for CLI feedback during slow operations.
 
-    Only displays the spinner when stderr is a real terminal (TTY).
-    In non-TTY environments (pipes, CI, etc.) this is a silent no-op.
+class StatusBanner:
+    """Always-visible loading banner with elapsed time.
+
+    Prints ``{message}...`` on entry and `` done ({elapsed}s)`` on exit.
 
     Usage::
 
-        with Spinner("Loading pipeline"):
+        with StatusBanner("Loading pipeline"):
             heavy_imports()
             load_config()
+
+    Output::
+
+        Loading pipeline... done (1.2s)
     """
 
     def __init__(self, message: str = "Loading") -> None:
         self._message = message
-        self._stop = threading.Event()
-        self._thread: threading.Thread | None = None
-        self._active = sys.stderr.isatty()
+        self._start: float = 0.0
 
-    def __enter__(self) -> "Spinner":
-        if self._active:
-            self._thread = threading.Thread(target=self._spin, daemon=True)
-            self._thread.start()
+    def __enter__(self) -> "StatusBanner":
+        self._start = time.monotonic()
+        click.echo(f"{self._message}... ", nl=False, err=True)
         return self
 
     def __exit__(self, *_: object) -> None:
-        if not self._active:
-            return
-        self._stop.set()
-        if self._thread is not None:
-            self._thread.join()
-        # Clear the spinner line
-        sys.stderr.write("\r" + " " * (len(self._message) + 4) + "\r")
-        sys.stderr.flush()
-
-    def _spin(self) -> None:
-        for ch in itertools.cycle("|/-\\"):
-            if self._stop.is_set():
-                break
-            sys.stderr.write(f"\r{self._message} {ch}")
-            sys.stderr.flush()
-            time.sleep(0.1)
+        elapsed = time.monotonic() - self._start
+        click.echo(f"done ({elapsed:.1f}s)", err=True)

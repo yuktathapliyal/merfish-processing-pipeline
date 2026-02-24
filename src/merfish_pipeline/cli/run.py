@@ -60,7 +60,7 @@ def run(
 
     EXPERIMENT is the path to the experiment YAML config file.
     """
-    from merfish_pipeline.cli.utils import Spinner
+    from merfish_pipeline.cli.utils import StatusBanner
 
     # --- Build CLI overrides ---
     overrides: dict = {}
@@ -76,7 +76,7 @@ def run(
         overrides.setdefault("pipeline", {})["force"] = True
 
     # --- Load config and heavy dependencies (with spinner for feedback) ---
-    with Spinner("Loading pipeline"):
+    with StatusBanner("Loading pipeline"):
         from merfish_pipeline.config.loader import load_pipeline_config
         from merfish_pipeline.exceptions import StageError
         from merfish_pipeline.execution.runner import resolve_stages, run_pipeline
