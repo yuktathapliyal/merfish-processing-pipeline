@@ -474,15 +474,17 @@ class MerlinConfigStage(PipelineStage):
         analysis_home.mkdir(parents=True, exist_ok=True)
         merlinenv_path = analysis_home / ".merlinenv"
 
-        # DATA_HOME should point to the remapped data dir when reregistration
-        # was used, so MERlin finds the remapped images.
+        # DATA_HOME is the parent directory; MERlin resolves data at
+        # DATA_HOME/<positional_arg> (e.g. output_dir/merlin_data).
+        data_home = Path(self.config.paths.output_dir)
+
         if rereg_info is not None:
-            data_home = rereg_info["remapped_data_dir"]
+            data_dir = rereg_info["remapped_data_dir"]
             self.logger.info(
-                "Using remapped data dir as DATA_HOME: %s", data_home,
+                "Using remapped data dir for MERlin: %s", data_dir,
             )
         else:
-            data_home = merlin_data_dir
+            data_dir = merlin_data_dir
 
         _generate_merlinenv(
             data_home=data_home,
@@ -498,7 +500,7 @@ class MerlinConfigStage(PipelineStage):
         # ---------------------------------------------------------------
         run_script_path = analysis_home / "run_merLIN.sh"
         _generate_run_script(
-            merlin_data_dir=data_home,
+            merlin_data_dir=data_dir,
             merlinenv_dir=analysis_home,
             xp_name=xp_name,
             codebook_filename=codebook_filename or "codebook.csv",
