@@ -454,32 +454,83 @@ correlation:
 
 ### 11. `segmentation`
 
-Runs Cellpose cell segmentation on MERlin's aligned images. Produces per-FOV
-cell masks.
+Runs [Cellpose](https://github.com/MouseLand/cellpose) cell segmentation on
+MERlin's aligned images. Identifies individual cells so that decoded RNA
+transcripts can later be assigned to specific cells.
+
+**How it works:**
+
+1. **Preprocessing** (per FOV): Loads an aligned multi-frame TIFF stack from
+   MERlin. Extracts a **nuclei channel** (one bit, set by `nuclei_bit`) and
+   builds a **cytoplasm channel** by summing all remaining bits. Applies a
+   median filter and min-max normalizes both channels to [0, 1]. Output is a
+   4-D volume `(Z, 2, Y, X)` where channel 0 = cytoplasm, channel 1 = nuclei.
+
+2. **Segmentation** (per FOV): Runs Cellpose in **2D+stitch mode** -- each
+   z-slice is segmented independently as a 2D image (`do_3D=False`), then
+   masks are stitched across z-slices using an IoU overlap threshold
+   (`stitch_threshold`). If a cell in slice z=5 overlaps sufficiently with a
+   cell in z=6, they receive the same cell ID. This is faster and more
+   memory-efficient than true 3D segmentation while still producing
+   consistent cell labels across the z-stack.
 
 **Output:**
 
 | File | Contents |
 |------|----------|
-| `segmentation/preprocessed/fov_*.tiff` | Preprocessed volumes (nuclei + cytoplasm channels) |
-| `segmentation/masks/fov_*_mask.tiff` | Cell segmentation masks (uint16 label images) |
+| `segmentation/preprocessed/fov_*_preprocessed.tif` | Preprocessed 4-D volumes (nuclei + cytoplasm channels) |
+| `segmentation/masks/fov_*_masks.tif` | Cell segmentation masks -- uint16 label images where each non-zero value = one cell |
 
-**Config:**
+**Config (3D mode, default):**
 
 ```yaml
 segmentation:
   enabled: true
   aligned_images_dir: "/path/to/merlin_output/FiducialCorrelationWarp/images"  # required
+  mode: "3d"                # segment all z-slices with 2D+stitch (default)
   nuclei_bit: 17            # bit index for nuclei channel in dataorganization
   total_bits: 18            # total bits including nuclei + cell channels
-  median_kernel: 3          # median filter kernel size
-  model_type: "cpsam"       # Cellpose model
-  diameter: null             # auto-detected if null
-  batch_size: 8
-  stitch_threshold: 0.5
+  median_kernel: 3          # median filter kernel size (odd integer)
+  model_type: "cpsam"       # Cellpose model ("cyto2", "cpsam", etc.)
+  diameter: null             # cell diameter in pixels (null = auto-detect)
+  batch_size: 8             # GPU batch size
+  stitch_threshold: 0.5     # IoU threshold for stitching 2D masks across z-slices
 ```
 
+**Config (2D mode -- single z-slice):**
+
+```yaml
+segmentation:
+  enabled: true
+  aligned_images_dir: "/path/to/merlin_output/FiducialCorrelationWarp/images"
+  mode: "2d"                # segment only one z-slice
+  reference_z_slice: 5      # which z-slice to segment (1-indexed by default)
+  z_indexing: 1              # 1 = 1-indexed (default), 0 = 0-indexed
+  nuclei_bit: 17
+  total_bits: 18
+  model_type: "cpsam"
+```
+
+**Output format:**
+
+- **3D mode (default):** The mask for each FOV is a 3-D array `(Z, Y, X)`
+  -- one 2D label image per z-slice. The stitching step assigns consistent cell
+  IDs across z-slices. For a FOV with 41 z-slices and 200 detected cells, the
+  mask would be `(41, 2048, 2048)` uint16 with values 0-200.
+- **2D mode:** Only the `reference_z_slice` is segmented. The output mask is a
+  2-D array `(Y, X)`. Downstream cell assignment uses this single mask for
+  barcodes from all z-slices. This is useful when only one z-slice has
+  sufficient image quality for reliable segmentation (e.g. Nikon).
+
+**Microscope compatibility:**
+
+- **ONI / Nikon:** Tested and supported.
+- **ANDOR:** Not yet validated. Current ANDOR image quality may not be
+  sufficient for reliable cell segmentation. Compatibility will be assessed
+  as ANDOR imaging protocols improve.
+
 **Requires:** MERlin completed externally. Install with `pip install -e ".[segmentation]"`.
+GPU is recommended but the stage falls back to CPU automatically if GPU is unavailable.
 
 ---
 

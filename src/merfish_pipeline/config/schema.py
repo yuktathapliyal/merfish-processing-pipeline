@@ -158,6 +158,11 @@ class SegmentationConfig(BaseModel):
     diameter: Optional[int] = None
     batch_size: int = 8
     stitch_threshold: float = 0.5
+    # "3d" = segment all z-slices with 2D+stitch (default)
+    # "2d" = segment only reference_z_slice, output a single 2D mask
+    mode: Literal["2d", "3d"] = "3d"
+    reference_z_slice: Optional[int] = None  # required when mode="2d" (see z_indexing)
+    z_indexing: Literal[0, 1] = 1  # 0 = 0-indexed, 1 = 1-indexed (default)
 
 
 class CorrelationConfig(BaseModel):

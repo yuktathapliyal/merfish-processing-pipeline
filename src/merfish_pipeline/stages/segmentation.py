@@ -23,10 +23,18 @@ Algorithm
    then stitch masks across z using an overlap threshold.
 3. Save the resulting ``uint16`` mask TIFF alongside the preprocessed volume.
 
+**Single-slice mode** (optional):
+
+When ``reference_z_slice`` is set in config, only that z-slice is preprocessed
+and segmented.  The output mask is 2-D ``(Y, X)`` instead of 3-D ``(Z, Y, X)``.
+This is useful when only one z-slice has sufficient image quality (e.g. Nikon).
+Downstream cell assignment applies the single mask to barcodes from all z-slices.
+
 Outputs
 -------
-- ``{output_dir}/segmentation/preprocessed/``  -- preprocessed 4-D volumes.
-- ``{output_dir}/segmentation/masks/``         -- per-FOV segmentation masks.
+- ``{output_dir}/segmentation/preprocessed/``  -- preprocessed volumes.
+- ``{output_dir}/segmentation/masks/``         -- per-FOV segmentation masks
+  (3-D if all z-slices, 2-D if single-slice mode).
 - ``{output_dir}/segmentation/run_metadata.json`` -- timing and parameters.
 """
 
@@ -106,6 +114,7 @@ def _preprocess_volume(
     nuclei_bit: int,
     total_bits: int,
     mf_kernel: int,
+    z_index: int | None = None,
 ) -> np.ndarray:
     """Extract and preprocess nuclei + cytoplasm channels from one FOV stack.
 
@@ -122,13 +131,16 @@ def _preprocess_volume(
     mf_kernel:
         Kernel size for the :func:`cv2.medianBlur` filter.  Must be a
         positive odd integer.
+    z_index:
+        If provided (0-based), extract only this z-slice.  The output will
+        still be 4-D with ``Z=1``.
 
     Returns
     -------
     np.ndarray
         4-D float32 array with shape ``(Z, 2, Y, X)``.
         Channel 0 is the preprocessed cytoplasm signal and channel 1 is
-        the preprocessed nuclei signal.
+        the preprocessed nuclei signal.  When *z_index* is set, ``Z=1``.
 
     Raises
     ------
@@ -170,6 +182,16 @@ def _preprocess_volume(
         raise ValueError(
             f"nuclei_bit={nuclei_bit} is out of range for stack with {n_bits} bits"
         )
+
+    # Optionally select a single z-slice
+    if z_index is not None:
+        if z_index < 0 or z_index >= n_z:
+            raise ValueError(
+                f"reference_z_slice maps to z_index={z_index} which is out of "
+                f"range [0, {n_z}) for {tiff_path.name}"
+            )
+        raw = raw[z_index : z_index + 1, :, :, :]  # keep 4-D: (1, bits, Y, X)
+        n_z = 1
 
     # Extract nuclei channel: (Z, Y, X)
     nuclei = raw[:, nuclei_bit, :, :].astype(np.float32)
@@ -316,6 +338,24 @@ class SegmentationStage(PipelineStage):
         batch_size = seg_cfg.batch_size
         stitch_threshold = seg_cfg.stitch_threshold
 
+        # Segmentation mode: "2d" = single reference slice, "3d" = all slices
+        single_slice_mode = seg_cfg.mode == "2d"
+        z_index: int | None = None
+        if single_slice_mode:
+            if seg_cfg.reference_z_slice is None:
+                return StageResult(
+                    status="failed",
+                    error="mode is '2d' but reference_z_slice is not set. "
+                    "Specify which z-slice to segment.",
+                )
+            z_index = seg_cfg.reference_z_slice - seg_cfg.z_indexing
+            self.logger.info(
+                "2D mode: segmenting z-slice %d (0-based) only",
+                z_index,
+            )
+        else:
+            self.logger.info("3D mode: segmenting all z-slices with 2D+stitch")
+
         # ----------------------------------------------------------
         # 0. Check optional cellpose dependency
         # ----------------------------------------------------------
@@ -346,10 +386,11 @@ class SegmentationStage(PipelineStage):
         self.logger.info("Found %d aligned image stack(s).", len(aligned_images))
 
         if dry_run:
+            mode_desc = f"z_slice={z_index} (0-based)" if single_slice_mode else "all z-slices (2D+stitch)"
             self.logger.info(
                 "[DRY RUN] Would preprocess and segment %d FOV(s) "
-                "using model_type=%s, diameter=%s, nuclei_bit=%d, total_bits=%d",
-                len(aligned_images), model_type, diameter, nuclei_bit, total_bits,
+                "using model_type=%s, diameter=%s, nuclei_bit=%d, total_bits=%d, mode=%s",
+                len(aligned_images), model_type, diameter, nuclei_bit, total_bits, mode_desc,
             )
             return StageResult(
                 status="skipped",
@@ -361,6 +402,8 @@ class SegmentationStage(PipelineStage):
                     "model_type": model_type,
                     "diameter": diameter,
                     "stitch_threshold": stitch_threshold,
+                    "single_slice_mode": single_slice_mode,
+                    "reference_z_index": z_index,
                 },
             )
 
@@ -397,6 +440,7 @@ class SegmentationStage(PipelineStage):
                     nuclei_bit=nuclei_bit,
                     total_bits=total_bits,
                     mf_kernel=median_kernel,
+                    z_index=z_index,
                 )
             except Exception as exc:
                 msg = f"Preprocessing failed for {fov_name}: {exc}"
@@ -426,6 +470,10 @@ class SegmentationStage(PipelineStage):
                 fov_errors.append(msg)
                 n_failed += 1
                 continue
+
+            # In single-slice mode, squeeze to 2D mask (Y, X)
+            if single_slice_mode and masks.ndim == 3 and masks.shape[0] == 1:
+                masks = masks[0]
 
             # Save mask
             mask_path = masks_dir / f"{fov_name}_masks.tif"
@@ -476,6 +524,8 @@ class SegmentationStage(PipelineStage):
                     "diameter": diameter,
                     "batch_size": batch_size,
                     "stitch_threshold": stitch_threshold,
+                    "single_slice_mode": single_slice_mode,
+                    "reference_z_index": z_index,
                     "fov_errors": fov_errors,
                 },
             )
@@ -494,6 +544,8 @@ class SegmentationStage(PipelineStage):
                 "diameter": diameter,
                 "batch_size": batch_size,
                 "stitch_threshold": stitch_threshold,
+                "single_slice_mode": single_slice_mode,
+                "reference_z_index": z_index,
                 "aligned_pattern": self._DEFAULT_ALIGNED_PATTERN,
             },
         )
