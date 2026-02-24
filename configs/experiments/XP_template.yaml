@@ -33,7 +33,7 @@ paths:
   output_dir: "/path/to/output/XP17596"
   # [OPTIONAL] Override derived output subdirectories (defaults shown):
   # remapped_data_dir: "/path/to/output/XP17596/remapped_data"
-  # merlin_data_dir: "/path/to/output/XP17596/merlin_analysis"
+  # merlin_data_dir: "/path/to/output/XP17596/merlin_data"
   # parameters_dir: "/path/to/output/XP17596/parameters"
 
 # ---------------------------------------------------------------------------
@@ -72,10 +72,16 @@ merlin:
 pipeline:
   # [OPTIONAL] List of stages to run. When empty, stages are controlled by
   # --stage or --from-stage CLI flags.
+  #
   # Valid stages (in canonical order):
   #   index, stitch, focus_qc, inspect_positions, reregistration,
   #   convert, ims_convert, merlin_config, filter_barcodes,
   #   correlation, segmentation
+  #
+  # Typical workflows:
+  #   ONI (with reregistration): [index, stitch, focus_qc, inspect_positions, reregistration, convert, merlin_config]
+  #   Nikon:  [index, stitch, focus_qc, inspect_positions, convert, merlin_config]
+  #   Andor:  [ims_convert, inspect_positions, merlin_config]
   stages: [index, stitch, focus_qc, inspect_positions]
   # [OPTIONAL] Preview mode -- log what would happen without executing.
   dry_run: false
@@ -104,7 +110,8 @@ inspect_positions:
   # rounds_to_check: [1, 5, 9]
 
 reregistration:
-  # Enable only after inspecting focus_qc results.
+  # ONI only -- enable after inspecting focus_qc results.
+  # Not needed for Nikon or Andor.
   enabled: false
   # [OPTIONAL] Override total z-slices per stack (auto-detected if null).
   # total_z: null
@@ -126,9 +133,29 @@ correlation:
 
 segmentation:
   enabled: false
-  # Cellpose model type.
-  model_type: "cpsam"
-  # [OPTIONAL] Expected cell diameter in pixels.
-  # diameter: null
-  batch_size: 8
-  stitch_threshold: 0.5
+  # [REQUIRED if enabled] Directory containing MERlin's aligned_images*.tif files.
+  # Typically: {merlin_analysis}/{experiment}/FiducialCorrelationWarp/images
+  # aligned_images_dir: "/path/to/FiducialCorrelationWarp/images"
+  #
+  # Segmentation mode:
+  #   "3d" = segment all z-slices with 2D+stitch (default)
+  #   "2d" = segment only reference_z_slice, output a single 2D mask
+  mode: "3d"
+  # [REQUIRED if mode="2d"] Which z-slice to segment.
+  # reference_z_slice: 5
+  # Whether reference_z_slice is 0-indexed or 1-indexed (default: 1-indexed).
+  z_indexing: 1
+  #
+  # Channel configuration (0-indexed bit numbers from data organization):
+  nuclei_bit: 0               # bit index for nuclei/DAPI channel
+  total_bits: 16              # total number of bits in aligned image stacks
+  # [OPTIONAL] Bits to exclude from cytoplasm sum (e.g. fiducial beads).
+  # nuclei_bit is always excluded automatically.
+  exclude_bits: []
+  #
+  # Cellpose parameters:
+  model_type: "cpsam"         # Cellpose model ("cyto2", "cpsam", etc.)
+  # diameter: null             # cell diameter in pixels (null = auto-detect)
+  median_kernel: 3            # median filter kernel size (odd integer)
+  batch_size: 8               # GPU batch size
+  stitch_threshold: 0.5       # IoU threshold for stitching masks across z (3D mode)
