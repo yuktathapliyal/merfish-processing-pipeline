@@ -353,16 +353,22 @@ class SegmentationStage(PipelineStage):
             )
 
         # --- Aligned images directory ---
-        if seg_cfg.aligned_images_dir is None:
+        input_dir = self._resolve_input_dir()
+        if input_dir is None:
+            auto_path = (
+                Path(self.config.paths.output_dir)
+                / "merlin_analysis"
+                / self.config.experiment.name
+                / "FiducialCorrelationWarp"
+                / "images"
+            )
             errors.append(
-                "segmentation.aligned_images_dir is required. "
-                "Set it to the MERlin output directory containing "
-                "aligned_images*.tif files "
-                "(e.g. {merlin_analysis}/{experiment}/FiducialCorrelationWarp/)."
+                "Could not find aligned images directory. Either:\n"
+                f"  - Set segmentation.aligned_images_dir in your config, or\n"
+                f"  - Run MERlin first so that {auto_path} exists."
             )
             return errors
 
-        input_dir = Path(seg_cfg.aligned_images_dir)
         if not input_dir.exists():
             errors.append(f"Aligned images directory does not exist: {input_dir}")
         elif not input_dir.is_dir():
@@ -439,6 +445,12 @@ class SegmentationStage(PipelineStage):
         # 1. Discover aligned images
         # ----------------------------------------------------------
         input_dir = self._resolve_input_dir()
+        if input_dir is None:
+            return StageResult(
+                status="failed",
+                error="Could not find aligned images directory. "
+                "Set segmentation.aligned_images_dir or run MERlin first.",
+            )
         self.logger.info("Scanning for aligned images in %s", input_dir)
 
         aligned_images = _find_aligned_images(input_dir, self._DEFAULT_ALIGNED_PATTERN)
@@ -630,9 +642,28 @@ class SegmentationStage(PipelineStage):
     # Helpers
     # ------------------------------------------------------------------
 
-    def _resolve_input_dir(self) -> Path:
-        """Return the configured aligned-images directory."""
-        return Path(self.config.segmentation.aligned_images_dir)
+    def _resolve_input_dir(self) -> Path | None:
+        """Resolve the aligned-images directory.
+
+        Priority:
+        1. Explicit ``segmentation.aligned_images_dir`` config override.
+        2. Auto-detect at ``{output_dir}/merlin_analysis/{xp}/FiducialCorrelationWarp/images``.
+        """
+        if self.config.segmentation.aligned_images_dir is not None:
+            return Path(self.config.segmentation.aligned_images_dir)
+
+        candidate = (
+            Path(self.config.paths.output_dir)
+            / "merlin_analysis"
+            / self.config.experiment.name
+            / "FiducialCorrelationWarp"
+            / "images"
+        )
+        if candidate.is_dir():
+            self.logger.info("Auto-detected aligned images at %s", candidate)
+            return candidate
+
+        return None
 
     @staticmethod
     def _init_cellpose_model(models_module: Any, model_type: str) -> Any:
