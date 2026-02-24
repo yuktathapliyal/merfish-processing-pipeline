@@ -59,7 +59,7 @@ just be slower.
 conda install -c conda-forge cellpose
 ```
 
-## Server / HPC install (conda + no-deps)
+## Server / HPC install (E.g.: Numbers) (conda + no-deps)
 
 On shared servers (e.g. Numbers, SLURM clusters), building C extensions from
 source often fails because the system GCC is too old or you don't have root
