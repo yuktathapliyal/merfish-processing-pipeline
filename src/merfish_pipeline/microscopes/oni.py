@@ -69,7 +69,7 @@ class ONIAdapter(MicroscopeAdapter):
                 records.append(info)
 
         self.logger.info(
-            "ONI discover: found %d files in %s", len(records), raw_dir
+            "%s discover: found %d files in %s", self.name.upper(), len(records), raw_dir
         )
         return records
 
@@ -140,7 +140,7 @@ class ONIAdapter(MicroscopeAdapter):
 
         result = pd.DataFrame(all_records)
         self.logger.info(
-            "ONI positions: %d rows from %d files", len(result), len(pos_files)
+            "%s positions: %d rows from %d files", self.name.upper(), len(result), len(pos_files)
         )
         return result
 
