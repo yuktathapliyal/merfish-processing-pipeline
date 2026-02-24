@@ -23,6 +23,8 @@ VALID_STAGES: list[str] = [
     "correlation",
     "segmentation",
     "cell_assignment",
+    "barcode_qc",
+    "anndata_export",
 ]
 
 # ---------------------------------------------------------------------------

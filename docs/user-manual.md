@@ -43,10 +43,13 @@ conda install -c conda-forge cellpose
 ### Optional extras
 
 ```bash
+# AnnData export (h5ad files for scanpy)
+pip install -e ".[export]"
+
 # Interactive trajectory plots (plotly)
 pip install -e ".[viz]"
 
-# Everything (segmentation + viz)
+# Everything (segmentation + export + viz)
 pip install -e ".[all]"
 ```
 
@@ -617,6 +620,92 @@ cell_assignment:
 
 ---
 
+### 13. `barcode_qc`
+
+Generates a comprehensive QC report from the decoded barcodes. Produces
+summary statistics, per-gene/FOV/cell metrics, and a multi-panel PDF report.
+
+**How it works:**
+
+1. Loads barcodes CSV (auto-detected from `cell_assignment` → `filter_barcodes`
+   → MERlin output).
+2. Maps barcode IDs to gene symbols via the codebook.
+3. Computes per-gene, per-FOV, and (if Cell_ID is present) per-cell statistics.
+4. Reads MERlin's `PlotPerformance/` CSVs if available for distance threshold
+   analysis (Pearson/Spearman correlation curves).
+5. Generates a 6-panel PDF report.
+
+**Output:**
+
+| File | Contents |
+|------|----------|
+| `barcode_qc/qc_summary.csv` | Single-row table with all QC metrics |
+| `barcode_qc/per_fov_stats.csv` | Barcode count and mean intensity per FOV |
+| `barcode_qc/per_gene_stats.csv` | Barcode count per gene with blank flag |
+| `barcode_qc/per_cell_stats.csv` | Barcodes/cell and genes/cell (only if Cell_ID present) |
+| `barcode_qc/qc_report.pdf` | Multi-panel plot: barcode abundance, intensity histogram, barcodes/FOV, threshold curve, barcodes/cell, top genes |
+
+**Config:**
+
+```yaml
+barcode_qc:
+  enabled: true
+  top_n_genes: 20           # how many top genes to show in report
+  # barcodes_file: null     # auto-detected
+```
+
+**Auto-detection (barcodes):**
+
+1. `cell_assignment/barcodes_assigned.csv` (preferred -- includes Cell_ID)
+2. `filter_barcodes/barcodes_filtered.csv`
+3. MERlin `ExportBarcodes/barcodes.csv`
+
+**Requires:** MERlin completed externally + codebook configured.
+
+---
+
+### 14. `anndata_export`
+
+Exports the cell-by-gene count matrix as an
+[AnnData](https://anndata.readthedocs.io/) h5ad file for downstream
+single-cell analysis with scanpy/squidpy.
+
+**How it works:**
+
+1. Loads barcodes CSV with `Cell_ID` column (from `cell_assignment`).
+2. Maps barcode IDs to gene symbols via codebook.
+3. Builds a cell x gene count matrix (`pd.crosstab`).
+4. Stores spatial coordinates (`global_x`, `global_y`) in
+   `adata.obsm['spatial']`.
+5. Stores cell metadata (FOV, n_barcodes, n_genes) in `adata.obs`.
+6. Optionally filters cells with too few barcodes and excludes blank genes.
+7. Writes h5ad (if `anndata` is installed) and a plain CSV fallback.
+
+**Output:**
+
+| File | Contents |
+|------|----------|
+| `anndata_export/{experiment}.h5ad` | AnnData object (requires `anndata` package) |
+| `anndata_export/cell_gene_matrix.csv` | Plain CSV: cells x genes count matrix |
+| `anndata_export/cell_metadata.csv` | Cell metadata: FOV, n_barcodes, n_genes |
+
+**Config:**
+
+```yaml
+anndata_export:
+  enabled: true
+  min_barcodes_per_cell: 0    # filter cells with fewer barcodes (0 = no filter)
+  exclude_blanks: true         # exclude blank genes from count matrix
+  # barcodes_file: null        # auto-detected from cell_assignment
+```
+
+**Install:** `pip install -e ".[export]"` (adds `anndata`). The CSV export
+works without `anndata` installed.
+
+**Requires:** `cell_assignment` stage completed + codebook configured.
+
+---
+
 ## Typical Workflows
 
 ### ONI or NIKON (standard)
@@ -634,10 +723,12 @@ merfish-pipe run my_experiment.yaml
 source output/merlin_analysis/.merlinenv
 bash output/merlin_analysis/run_merLIN.sh
 
-# 3. Run post-MERlin analysis (segmentation, cell assignment, correlation)
+# 3. Run post-MERlin analysis
 merfish-pipe run my_experiment.yaml --stage segmentation
 merfish-pipe run my_experiment.yaml --stage cell_assignment
 merfish-pipe run my_experiment.yaml --stage correlation
+merfish-pipe run my_experiment.yaml --stage barcode_qc
+merfish-pipe run my_experiment.yaml --stage anndata_export
 ```
 
 ### Andor
@@ -690,8 +781,10 @@ merfish-pipe run my_experiment.yaml --stage segmentation
 # 5. Assign barcodes to cells (uses filtered barcodes automatically)
 merfish-pipe run my_experiment.yaml --stage cell_assignment
 
-# 6. Correlation
+# 6. QC and analysis
 merfish-pipe run my_experiment.yaml --stage correlation
+merfish-pipe run my_experiment.yaml --stage barcode_qc
+merfish-pipe run my_experiment.yaml --stage anndata_export
 ```
 
 ---
@@ -750,10 +843,20 @@ output_dir/
 ├── segmentation/                  (if enabled)
 │   ├── preprocessed/
 │   └── masks/
-└── cell_assignment/               (if enabled)
-    ├── barcodes_assigned.csv
-    ├── barcodes_assigned_filtered.csv  (if crop_margin > 0)
-    └── assignment_summary.csv
+├── cell_assignment/               (if enabled)
+│   ├── barcodes_assigned.csv
+│   ├── barcodes_assigned_filtered.csv  (if crop_margin > 0)
+│   └── assignment_summary.csv
+├── barcode_qc/                   (if enabled)
+│   ├── qc_summary.csv
+│   ├── per_fov_stats.csv
+│   ├── per_gene_stats.csv
+│   ├── per_cell_stats.csv        (if Cell_ID present)
+│   └── qc_report.pdf
+└── anndata_export/               (if enabled)
+    ├── {experiment}.h5ad
+    ├── cell_gene_matrix.csv
+    └── cell_metadata.csv
 ```
 
 Every stage writes a `run_metadata.json` file in its output directory with
@@ -830,3 +933,8 @@ wheel: `pip install --only-binary :all: fastremap` then `pip install cellpose`.
 
 This pipeline requires cellpose v4.0+. Upgrade with:
 `pip install --upgrade cellpose`.
+
+### anndata_export writes CSV but no h5ad
+
+Install the export extra: `pip install -e ".[export]"`. The h5ad file requires
+the `anndata` package. The CSV fallback always works without it.

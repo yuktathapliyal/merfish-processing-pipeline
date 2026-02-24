@@ -192,6 +192,15 @@ def _build_template(microscope: str) -> dict:
             "masks_dir": None,
             "crop_margin": 0,
         },
+        "barcode_qc": {
+            "enabled": False,
+            "top_n_genes": 20,
+        },
+        "anndata_export": {
+            "enabled": False,
+            "min_barcodes_per_cell": 0,
+            "exclude_blanks": True,
+        },
         "pipeline": {
             "stages": ["index", "stitch", "focus_qc", "inspect_positions"],
         },

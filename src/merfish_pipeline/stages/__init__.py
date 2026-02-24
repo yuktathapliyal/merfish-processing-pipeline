@@ -22,6 +22,10 @@ segmentation
     Cellpose cell segmentation on aligned microscopy images.
 cell_assignment
     Assign decoded barcodes to segmented cells using per-FOV masks.
+barcode_qc
+    Post-MERlin QC report with barcode metrics and diagnostic plots.
+anndata_export
+    Export cell-by-gene count matrix to AnnData h5ad format.
 """
 
 from merfish_pipeline.stages.base import PipelineStage, StageResult
@@ -45,6 +49,8 @@ from merfish_pipeline.stages.filter_barcodes import FilterBarcodesStage  # noqa:
 from merfish_pipeline.stages.correlation import CorrelationStage  # noqa: F401
 from merfish_pipeline.stages.segmentation import SegmentationStage  # noqa: F401
 from merfish_pipeline.stages.cell_assignment import CellAssignmentStage  # noqa: F401
+from merfish_pipeline.stages.barcode_qc import BarcodeQCStage  # noqa: F401
+from merfish_pipeline.stages.anndata_export import AnnDataExportStage  # noqa: F401
 
 __all__ = [
     "PipelineStage",

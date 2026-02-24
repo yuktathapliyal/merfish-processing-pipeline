@@ -198,6 +198,27 @@ class CorrelationConfig(BaseModel):
     distance_thresholds: list[float] = [0.5167, 0.50, 0.45, 0.40, 0.35, 0.30, 0.25]
 
 
+class BarcodeQCConfig(BaseModel):
+    """Configuration for the barcode_qc stage."""
+
+    model_config = {"extra": "forbid"}
+
+    enabled: bool = False
+    barcodes_file: Optional[Path] = None
+    top_n_genes: int = 20
+
+
+class AnnDataExportConfig(BaseModel):
+    """Configuration for the anndata_export stage."""
+
+    model_config = {"extra": "forbid"}
+
+    enabled: bool = False
+    barcodes_file: Optional[Path] = None
+    min_barcodes_per_cell: int = 0
+    exclude_blanks: bool = True
+
+
 class PipelineStagesConfig(BaseModel):
     model_config = {"extra": "forbid"}
 
@@ -233,6 +254,8 @@ class ExperimentConfig(BaseModel):
     segmentation: SegmentationConfig = SegmentationConfig()
     cell_assignment: CellAssignmentConfig = CellAssignmentConfig()
     correlation: CorrelationConfig = CorrelationConfig()
+    barcode_qc: BarcodeQCConfig = BarcodeQCConfig()
+    anndata_export: AnnDataExportConfig = AnnDataExportConfig()
     pipeline: PipelineStagesConfig = PipelineStagesConfig()
 
 
@@ -298,6 +321,8 @@ class PipelineConfig(BaseModel):
     segmentation: SegmentationConfig = SegmentationConfig()
     cell_assignment: CellAssignmentConfig = CellAssignmentConfig()
     correlation: CorrelationConfig = CorrelationConfig()
+    barcode_qc: BarcodeQCConfig = BarcodeQCConfig()
+    anndata_export: AnnDataExportConfig = AnnDataExportConfig()
     pipeline: PipelineStagesConfig = PipelineStagesConfig()
 
     # Layer 1 -- resolved microscope settings
