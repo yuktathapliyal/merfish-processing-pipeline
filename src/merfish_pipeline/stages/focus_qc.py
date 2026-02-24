@@ -35,7 +35,6 @@ import pandas as pd
 import seaborn as sns
 
 from merfish_pipeline.io.path_utils import find_files_matching
-from merfish_pipeline.io.tiff_io import read_tiff
 from merfish_pipeline.stages.base import PipelineStage, StageResult
 from merfish_pipeline.stages.registry import register_stage
 
@@ -75,7 +74,7 @@ def _focus_score(image: np.ndarray, sigma: float, ksize: int) -> float:
     Parameters
     ----------
     image:
-        2-D grayscale image (uint8 or uint16).
+        2-D grayscale image (uint8).
     sigma:
         Standard deviation of the Gaussian pre-filter.
     ksize:
@@ -86,15 +85,6 @@ def _focus_score(image: np.ndarray, sigma: float, ksize: int) -> float:
     float
         Variance of the Laplacian response -- higher means sharper focus.
     """
-    # Ensure 8-bit for cv2 compatibility when source is 16-bit.
-    if image.dtype != np.uint8:
-        # Normalise to 0-255 without saturating.
-        img_f = image.astype(np.float32)
-        lo, hi = img_f.min(), img_f.max()
-        if hi - lo > 0:
-            img_f = (img_f - lo) / (hi - lo) * 255.0
-        image = img_f.astype(np.uint8)
-
     blurred = cv2.GaussianBlur(image, (0, 0), sigmaX=sigma, sigmaY=sigma)
     lap = cv2.Laplacian(blurred, cv2.CV_32F, ksize=ksize)
     return float(lap.var())
@@ -125,10 +115,9 @@ def _best_z_for_stack(
     z_labels: list[str] = []
 
     for path in files:
-        img = read_tiff(path)
-        # Collapse multi-channel images to single plane if needed.
-        if img.ndim == 3:
-            img = img[0]
+        img = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
+        if img is None:
+            raise IOError(f"Could not read image: {path}")
         scores.append(_focus_score(img, sigma=sigma, ksize=ksize))
         _, _, z = _parse_filename(path)
         z_labels.append(z)

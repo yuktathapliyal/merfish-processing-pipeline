@@ -28,6 +28,7 @@ numbers (MERlin expects 0-based FOV numbering).
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from pathlib import Path
 
@@ -186,6 +187,29 @@ class ConvertStage(PipelineStage):
             manifest_df["abs_path"] = manifest_df["abs_path"].apply(
                 lambda p: str(Path(str(p).replace(str(raw_dir), str(source_dir))))
             )
+            # Filter manifest to reregistered z-range (remapped files
+            # only exist for z=1..target_z).
+            rereg_meta_path = (
+                Path(self.config.paths.output_dir)
+                / "reregistration"
+                / "run_metadata.json"
+            )
+            if rereg_meta_path.exists():
+                with rereg_meta_path.open() as f:
+                    rereg_meta = json.load(f)
+                target_z = rereg_meta.get("parameters", {}).get("target_z")
+                if target_z is not None:
+                    before = len(manifest_df)
+                    manifest_df = manifest_df[
+                        manifest_df["z_slice"].astype(int) <= int(target_z)
+                    ]
+                    self.logger.info(
+                        "Filtered manifest to z_slice <= %d (reregistered): "
+                        "%d -> %d rows",
+                        target_z,
+                        before,
+                        len(manifest_df),
+                    )
 
         # ----------------------------------------------------------
         # Step 2: Determine global wavelength order
