@@ -2,9 +2,20 @@
 
 from __future__ import annotations
 
-import click
+import sys
+import time
 
-from merfish_pipeline import __version__
+# Print immediately so the user knows the tool is starting, before any
+# heavy imports (pydantic, yaml, etc.) that can take 30-60s on cold servers.
+_boot_start = time.monotonic()
+print("Starting merfish-pipe... ", end="", flush=True, file=sys.stderr)
+
+import click  # noqa: E402
+
+from merfish_pipeline import __version__  # noqa: E402
+
+_boot_elapsed = time.monotonic() - _boot_start
+print(f"ready ({_boot_elapsed:.1f}s)", flush=True, file=sys.stderr)
 
 
 @click.group()
