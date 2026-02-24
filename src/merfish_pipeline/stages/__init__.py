@@ -20,6 +20,8 @@ merlin_config
     Generate all MERlin parameter files (does not run MERlin).
 segmentation
     Cellpose cell segmentation on aligned microscopy images.
+cell_assignment
+    Assign decoded barcodes to segmented cells using per-FOV masks.
 """
 
 from merfish_pipeline.stages.base import PipelineStage, StageResult
@@ -42,6 +44,7 @@ from merfish_pipeline.stages.merlin_config import MerlinConfigStage  # noqa: F40
 from merfish_pipeline.stages.filter_barcodes import FilterBarcodesStage  # noqa: F401
 from merfish_pipeline.stages.correlation import CorrelationStage  # noqa: F401
 from merfish_pipeline.stages.segmentation import SegmentationStage  # noqa: F401
+from merfish_pipeline.stages.cell_assignment import CellAssignmentStage  # noqa: F401
 
 __all__ = [
     "PipelineStage",

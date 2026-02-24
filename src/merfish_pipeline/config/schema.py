@@ -177,6 +177,19 @@ class SegmentationConfig(BaseModel):
         return v
 
 
+class CellAssignmentConfig(BaseModel):
+    """Configuration for the cell_assignment stage."""
+
+    model_config = {"extra": "forbid"}
+
+    enabled: bool = False
+    barcodes_file: Optional[Path] = None
+    masks_dir: Optional[Path] = None
+    mask_pattern: str = "*_masks.tif*"
+    crop_margin: int = 0
+    fov_id_format: str = "Cell{fov}_{label}"
+
+
 class CorrelationConfig(BaseModel):
     model_config = {"extra": "forbid"}
 
@@ -218,6 +231,7 @@ class ExperimentConfig(BaseModel):
     reregistration: ReregistrationConfig = ReregistrationConfig()
     filter_barcodes: FilterBarcodesConfig = FilterBarcodesConfig()
     segmentation: SegmentationConfig = SegmentationConfig()
+    cell_assignment: CellAssignmentConfig = CellAssignmentConfig()
     correlation: CorrelationConfig = CorrelationConfig()
     pipeline: PipelineStagesConfig = PipelineStagesConfig()
 
@@ -282,6 +296,7 @@ class PipelineConfig(BaseModel):
     reregistration: ReregistrationConfig = ReregistrationConfig()
     filter_barcodes: FilterBarcodesConfig = FilterBarcodesConfig()
     segmentation: SegmentationConfig = SegmentationConfig()
+    cell_assignment: CellAssignmentConfig = CellAssignmentConfig()
     correlation: CorrelationConfig = CorrelationConfig()
     pipeline: PipelineStagesConfig = PipelineStagesConfig()
 

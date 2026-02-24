@@ -187,6 +187,11 @@ def _build_template(microscope: str) -> dict:
             "reference_z_slice": None,
             "z_indexing": 1,
         },
+        "cell_assignment": {
+            "enabled": False,
+            "masks_dir": None,
+            "crop_margin": 0,
+        },
         "pipeline": {
             "stages": ["index", "stitch", "focus_qc", "inspect_positions"],
         },

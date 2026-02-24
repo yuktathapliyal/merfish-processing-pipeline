@@ -7,7 +7,7 @@ from merfish_pipeline.stages.registry import STAGE_REGISTRY, list_stages
 
 
 class TestStageRegistry:
-    """Verify that all 11 stages are registered."""
+    """Verify that all stages are registered."""
 
     def test_registry_has_all_stages(self):
         """All VALID_STAGES should have a registered implementation."""
@@ -19,14 +19,14 @@ class TestStageRegistry:
         )
 
     def test_registry_count(self):
-        """There should be exactly 11 registered stages."""
-        assert len(STAGE_REGISTRY) == 11
+        """Registry count should match VALID_STAGES."""
+        assert len(STAGE_REGISTRY) == len(VALID_STAGES)
 
     def test_list_stages_returns_sorted(self):
         """list_stages() should return all names sorted alphabetically."""
         names = list_stages()
         assert names == sorted(names)
-        assert len(names) == 11
+        assert len(names) == len(VALID_STAGES)
 
 
 class TestEnabledFlagSkipping:

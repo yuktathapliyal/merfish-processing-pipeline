@@ -76,7 +76,7 @@ pipeline:
   # Valid stages (in canonical order):
   #   index, stitch, focus_qc, inspect_positions, reregistration,
   #   convert, ims_convert, merlin_config, filter_barcodes,
-  #   correlation, segmentation
+  #   correlation, segmentation, cell_assignment
   #
   # Typical workflows:
   #   ONI (with reregistration): [index, stitch, focus_qc, inspect_positions, reregistration, convert, merlin_config]
@@ -161,3 +161,14 @@ segmentation:
   stitch_threshold: 0.5       # IoU threshold for stitching masks across z (3D mode)
   flow_threshold: 0.4         # Cellpose flow error threshold (lower = stricter)
   cellprob_threshold: 0.0     # minimum cell probability to accept a pixel
+
+cell_assignment:
+  enabled: false
+  # [OPTIONAL] Explicit path to barcodes CSV. When null, auto-detected from
+  # filter_barcodes output or MERlin ExportBarcodes.
+  # barcodes_file: null
+  # [OPTIONAL] Explicit path to masks directory. When null, uses
+  # {output_dir}/segmentation/masks/.
+  # masks_dir: null
+  # [OPTIONAL] Pixel margin from FOV edge for border cell filtering (0 = disabled).
+  crop_margin: 0

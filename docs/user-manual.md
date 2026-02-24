@@ -567,6 +567,56 @@ GPU is recommended but the stage falls back to CPU automatically if GPU is unava
 
 ---
 
+### 12. `cell_assignment`
+
+Assigns each decoded barcode to a segmented cell by indexing into per-FOV
+segmentation masks. Optionally filters border cells whose barcodes fall near
+FOV edges.
+
+**How it works:**
+
+1. Loads the barcodes CSV (auto-detected from `filter_barcodes` output, then
+   MERlin `ExportBarcodes/barcodes.csv`, or set explicitly).
+2. Discovers per-FOV mask TIFFs from the `segmentation` stage output (or a
+   custom path).
+3. For each FOV, loads the mask and uses the barcode's per-FOV pixel
+   coordinates (`x`, `y`, `z`) to look up the cell label:
+   - **3D masks** `(Z, Y, X)`: `label = mask[z, y, x]`
+   - **2D masks** `(Y, X)`: `label = mask[y, x]` (z is ignored)
+4. Assigns `Cell_ID = "Cell{fov}_{label}"` for non-zero labels. Barcodes
+   landing on background (label 0) get `Cell_ID = None`.
+5. If `crop_margin > 0`, identifies cells with any barcode within that many
+   pixels of a FOV edge and removes all barcodes belonging to those cells.
+
+**Output:**
+
+| File | Contents |
+|------|----------|
+| `cell_assignment/barcodes_assigned.csv` | Full barcodes table with `Cell_ID` column added |
+| `cell_assignment/barcodes_assigned_filtered.csv` | Border-filtered version (only when `crop_margin > 0`) |
+| `cell_assignment/assignment_summary.csv` | Per-FOV stats: barcode count, assigned count, cell count |
+
+**Config:**
+
+```yaml
+cell_assignment:
+  enabled: true
+  # barcodes_file: null      # auto-detected from filter_barcodes or MERlin output
+  # masks_dir: null           # auto-detected from {output_dir}/segmentation/masks/
+  crop_margin: 0              # pixels from FOV edge for border filtering (0 = disabled)
+```
+
+**Auto-detection:**
+
+- **Barcodes:** Checks `filter_barcodes/barcodes_filtered.csv` first (preferred
+  after reregistration), then MERlin's `ExportBarcodes/barcodes.csv`.
+- **Masks:** Checks `{output_dir}/segmentation/masks/` for `*_masks.tif*` files.
+  FOV numbers are extracted from filenames automatically.
+
+**Requires:** `segmentation` stage completed + MERlin completed externally.
+
+---
+
 ## Typical Workflows
 
 ### ONI or NIKON (standard)
@@ -584,7 +634,9 @@ merfish-pipe run my_experiment.yaml
 source output/merlin_analysis/.merlinenv
 bash output/merlin_analysis/run_merLIN.sh
 
-# 3. Run post-MERlin analysis
+# 3. Run post-MERlin analysis (segmentation, cell assignment, correlation)
+merfish-pipe run my_experiment.yaml --stage segmentation
+merfish-pipe run my_experiment.yaml --stage cell_assignment
 merfish-pipe run my_experiment.yaml --stage correlation
 ```
 
@@ -612,6 +664,13 @@ reregistration:
 
 filter_barcodes:
   enabled: true
+
+segmentation:
+  enabled: true
+
+cell_assignment:
+  enabled: true
+  crop_margin: 10             # filter cells near FOV edges
 ```
 
 ```bash
@@ -622,10 +681,16 @@ merfish-pipe run my_experiment.yaml
 source output/merlin_analysis/.merlinenv
 bash output/merlin_analysis/run_merLIN.sh
 
-# 3. Filter duplicate barcodes
+# 3. Filter duplicate barcodes from reregistration
 merfish-pipe run my_experiment.yaml --stage filter_barcodes
 
-# 4. Correlation (uses filtered barcodes automatically)
+# 4. Segment cells
+merfish-pipe run my_experiment.yaml --stage segmentation
+
+# 5. Assign barcodes to cells (uses filtered barcodes automatically)
+merfish-pipe run my_experiment.yaml --stage cell_assignment
+
+# 6. Correlation
 merfish-pipe run my_experiment.yaml --stage correlation
 ```
 
@@ -682,9 +747,13 @@ output_dir/
 ├── correlation/                   (if enabled)
 │   ├── info_{name}.csv
 │   └── correlation_plots.pdf
-└── segmentation/                  (if enabled)
-    ├── preprocessed/
-    └── masks/
+├── segmentation/                  (if enabled)
+│   ├── preprocessed/
+│   └── masks/
+└── cell_assignment/               (if enabled)
+    ├── barcodes_assigned.csv
+    ├── barcodes_assigned_filtered.csv  (if crop_margin > 0)
+    └── assignment_summary.csv
 ```
 
 Every stage writes a `run_metadata.json` file in its output directory with
