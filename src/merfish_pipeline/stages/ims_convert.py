@@ -333,6 +333,9 @@ class IMSConvertStage(PipelineStage):
 
             ims_entries.sort(key=lambda x: x[0])
 
+            # Build 0-based FOV index mapping (MERlin expects 0-based FOV numbering)
+            fov_to_idx = {fov: idx for idx, (fov, _) in enumerate(ims_entries)}
+
             self.logger.info(
                 "  Found %d IMS files for round %d", len(ims_entries), round_num
             )
@@ -347,7 +350,8 @@ class IMSConvertStage(PipelineStage):
 
                 Returns ``(fov, output_path_str, error_message)``.
                 """
-                out_name = f"merFISH_merged_{rnd:02d}_{fov:03d}.tiff"
+                fov_idx = fov_to_idx[fov]  # 0-based index for MERlin
+                out_name = f"merFISH_merged_{rnd:02d}_{fov_idx:03d}.tiff"
                 out_path = merlin_dir / out_name
                 try:
                     _convert_single_ims(ims_path, out_path, channel_order)

@@ -20,7 +20,10 @@ Algorithm
 
 Output filename convention::
 
-    merFISH_merged_{round:02d}_{fov:03d}.tiff
+    merFISH_merged_{round:02d}_{fov_idx:03d}.tiff
+
+where ``fov_idx`` is a 0-based index derived from the sorted unique FOV
+numbers (MERlin expects 0-based FOV numbering).
 """
 
 from __future__ import annotations
@@ -201,6 +204,10 @@ class ConvertStage(PipelineStage):
         n_groups = len(grouped)
         self.logger.info("Found %d (round, fov) groups to merge.", n_groups)
 
+        # Build 0-based FOV index mapping (MERlin expects 0-based FOV numbering)
+        sorted_fovs = sorted(manifest_df["fov"].unique())
+        fov_to_idx = {fov: idx for idx, fov in enumerate(sorted_fovs)}
+
         if dry_run:
             self.logger.info("[DRY RUN] Would merge %d stacks.", n_groups)
             return StageResult(
@@ -215,8 +222,8 @@ class ConvertStage(PipelineStage):
 
         for idx, ((rnd, fov), group_df) in enumerate(sorted(grouped), start=1):
             rnd_int = int(rnd)
-            fov_int = int(fov)
-            output_name = f"merFISH_merged_{rnd_int:02d}_{fov_int:03d}.tiff"
+            fov_idx = fov_to_idx[fov]  # 0-based index for MERlin
+            output_name = f"merFISH_merged_{rnd_int:02d}_{fov_idx:03d}.tiff"
             output_path = merlin_data_dir / output_name
 
             # Skip existing files unless --force
@@ -238,8 +245,9 @@ class ConvertStage(PipelineStage):
 
             n_planes = len(plane_paths)
             self.logger.info(
-                "Merging FOV %d, round %d: %d planes -> %s",
-                fov_int,
+                "Merging FOV %s (idx=%d), round %d: %d planes -> %s",
+                fov,
+                fov_idx,
                 rnd_int,
                 n_planes,
                 output_path,
@@ -254,12 +262,13 @@ class ConvertStage(PipelineStage):
                 )
             except Exception as exc:
                 self.logger.error(
-                    "Failed to merge FOV %d, round %d: %s",
-                    fov_int,
+                    "Failed to merge FOV %s (idx=%d), round %d: %s",
+                    fov,
+                    fov_idx,
                     rnd_int,
                     exc,
                 )
-                failed.append(f"round={rnd_int}, fov={fov_int}: {exc}")
+                failed.append(f"round={rnd_int}, fov={fov} (idx={fov_idx}): {exc}")
                 continue
 
             # Validate the merged stack
