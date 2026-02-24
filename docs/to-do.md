@@ -3,7 +3,5 @@
 
 
 ### Add to pipeline:
-1. segmentation: barcodes to cells
-2. post-processing Merlin outputs
-3. documentation
-4. Example folder
+1. Remove multiple z's from the trajectory-plot.html in the inspect_positions
+2. Change the position of https://github.com/yuktathapliyal/merfish-processing-pipeline/blob/main/docs/stages-reregistration.md to be after segmentation and barcode to cell assignment
