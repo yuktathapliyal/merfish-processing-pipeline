@@ -279,11 +279,12 @@ def _segment_volume(
         3-D ``uint16`` mask array ``(Z, Y, X)`` where each unique non-zero
         value represents one segmented cell.
     """
-    # Cellpose eval expects (Z, C, Y, X) for multi-channel, channels=[1, 2]
-    # means: channel 1 = cytoplasm (green), channel 2 = nuclei (red).
+    # Cellpose v4+ requires explicit axis parameters for 4-D input.
+    # Our volume shape is (Z, C=2, Y, X): Z=axis 0, C=axis 1.
     masks, flows, styles = model.eval(
         volume,
-        channels=[1, 2],
+        z_axis=0,
+        channel_axis=1,
         diameter=diameter,
         do_3D=False,
         stitch_threshold=stitch_threshold,
