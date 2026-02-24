@@ -24,10 +24,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-segmentation = ["cellpose>=3.0"]
+segmentation = ["cellpose>=4.0"]
 viz = ["plotly>=5.0"]
 dev = ["pytest>=7.0", "pytest-cov>=4.0", "ruff>=0.1"]
-all = ["cellpose>=3.0", "plotly>=5.0"]
+all = ["cellpose>=4.0", "plotly>=5.0"]
 
 [project.scripts]
 merfish-pipe = "merfish_pipeline.cli.main:cli"

@@ -10,7 +10,14 @@ cd merfish-processing-pipeline
 # Install in editable mode
 pip install -e .
 
-# With cell segmentation support (requires GPU recommended)
+# With cell segmentation support (cellpose + PyTorch, GPU recommended)
+pip install -e ".[segmentation]"
+
+# If pip fails to build fastremap (common on servers with old GCC):
+conda install -c conda-forge cellpose
+
+# CPU-only server (smaller download, no CUDA):
+pip install torch --index-url https://download.pytorch.org/whl/cpu
 pip install -e ".[segmentation]"
 
 # With interactive plots (plotly)
@@ -720,3 +727,14 @@ skips this plot if plotly is not installed.
 ### Segmentation fails with "no module named cellpose"
 
 Install the segmentation extra: `pip install -e ".[segmentation]"`.
+
+### cellpose install fails with "fastremap" build error
+
+This happens on systems with old GCC (< 9.3). Use conda instead:
+`conda install -c conda-forge cellpose`. Or install fastremap from a pre-built
+wheel: `pip install --only-binary :all: fastremap` then `pip install cellpose`.
+
+### Segmentation fails with "channel_axis and z_axis must be specified"
+
+This pipeline requires cellpose v4.0+. Upgrade with:
+`pip install --upgrade cellpose`.
