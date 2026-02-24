@@ -1,0 +1,72 @@
+# Installation
+
+## Core install
+
+```bash
+git clone <repo-url>
+cd merfish-processing-pipeline
+pip install -e .
+```
+
+This installs the pipeline with all core dependencies (numpy, pandas, tifffile,
+opencv, matplotlib, etc.). No GPU or special hardware required for the core
+stages.
+
+## Optional extras
+
+Some stages need additional packages. Install only what you need:
+
+| Extra | What it adds | When you need it | Install command |
+|-------|-------------|-----------------|----------------|
+| `segmentation` | [Cellpose](https://github.com/MouseLand/cellpose) | Cell segmentation (stage 11) | `pip install -e ".[segmentation]"` |
+| `export` | [AnnData](https://anndata.readthedocs.io/) | h5ad export for scanpy (stage 14) | `pip install -e ".[export]"` |
+| `viz` | [Plotly](https://plotly.com/python/) | Interactive trajectory plots (stage 4) | `pip install -e ".[viz]"` |
+| `all` | All of the above | Full pipeline | `pip install -e ".[all]"` |
+
+## Cellpose GPU setup
+
+Cellpose (used by the `segmentation` stage) runs **much** faster with a GPU.
+If you have an NVIDIA GPU, install PyTorch with CUDA **before** the
+segmentation extra:
+
+```bash
+# Check your CUDA version first
+nvidia-smi
+
+# Install PyTorch with CUDA (example for CUDA 12.1)
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+
+# Then install the segmentation extra
+pip install -e ".[segmentation]"
+
+# Verify GPU is available
+python -c "import torch; print(torch.cuda.is_available())"  # should print True
+```
+
+**CPU-only servers** (no GPU):
+
+```bash
+pip install torch --index-url https://download.pytorch.org/whl/cpu
+pip install -e ".[segmentation]"
+```
+
+The pipeline will automatically fall back to CPU if no GPU is detected. It will
+just be slower.
+
+**If pip fails to build fastremap** (common on servers with old GCC < 9.3):
+
+```bash
+conda install -c conda-forge cellpose
+```
+
+## Verify your install
+
+```bash
+merfish-pipe --help
+```
+
+You should see the list of available commands (`run`, `config`, `status`).
+
+---
+
+Next: [Configuration](configuration.md)
