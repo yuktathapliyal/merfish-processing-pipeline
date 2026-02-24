@@ -29,7 +29,7 @@ VALID_STAGES: list[str] = [
 # ---------------------------------------------------------------------------
 DEFAULT_DERIVED_PATHS: dict[str, str] = {
     "remapped_data_dir": "remapped_data",
-    "merlin_data_dir": "merlin_analysis",
+    "merlin_data_dir": "merlin_data",
     "parameters_dir": "parameters",
     "logs_dir": "logs",
 }

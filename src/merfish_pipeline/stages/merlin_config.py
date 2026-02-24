@@ -224,6 +224,7 @@ def _generate_merlinenv(
 
 def _generate_run_script(
     merlin_data_dir: Path,
+    merlinenv_dir: Path,
     xp_name: str,
     codebook_filename: str,
     cores: int,
@@ -234,9 +235,11 @@ def _generate_run_script(
     Parameters
     ----------
     merlin_data_dir:
-        Working directory from which MERlin is launched.  The ``.merlinenv``
-        file is expected to live here, so ``MERLIN_ENV_PATH`` is set to this
-        directory.
+        Directory containing the merged TIFF data.  Its name is passed as
+        the positional argument to MERlin.
+    merlinenv_dir:
+        Directory containing the ``.merlinenv`` file.  ``MERLIN_ENV_PATH``
+        is set to this directory.
     xp_name:
         Experiment name used in parameter file naming.
     codebook_filename:
@@ -246,18 +249,15 @@ def _generate_run_script(
     output_path:
         Where to write the shell script.
     """
-    import os
-
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     # The trailing positional argument is the data directory name relative to
-    # DATA_HOME.  When DATA_HOME == merlin_data_dir (the typical setup produced
-    # by _generate_merlinenv), the relative path is simply ".".
+    # DATA_HOME.
     data_dir_rel = merlin_data_dir.name
 
     script = f"""\
 #!/bin/bash
-export MERLIN_ENV_PATH="{merlin_data_dir}"
+export MERLIN_ENV_PATH="{merlinenv_dir}"
 
 merlin \\
     -a analysis_{xp_name}.json \\
@@ -337,14 +337,14 @@ class MerlinConfigStage(PipelineStage):
     def check_outputs_exist(self) -> bool:
         """Return True if all key output files already exist."""
         params_dir = Path(self.config.paths.parameters_dir)
-        merlin_data_dir = Path(self.config.paths.merlin_data_dir)
+        analysis_home = Path(self.config.paths.output_dir) / "merlin_analysis"
         xp_name = self.config.experiment.name
 
         required = [
             params_dir / "dataorganization" / f"data_organization_{xp_name}.csv",
             params_dir / "positions" / f"positions_{xp_name}.csv",
-            merlin_data_dir / ".merlinenv",
-            merlin_data_dir / "run_merLIN.sh",
+            analysis_home / ".merlinenv",
+            analysis_home / "run_merLIN.sh",
             self.get_output_dir() / "run_metadata.json",
         ]
         return all(p.exists() for p in required)
@@ -471,8 +471,8 @@ class MerlinConfigStage(PipelineStage):
         # ---------------------------------------------------------------
         # 6. .merlinenv
         # ---------------------------------------------------------------
-        merlin_data_dir.mkdir(parents=True, exist_ok=True)
-        merlinenv_path = merlin_data_dir / ".merlinenv"
+        analysis_home.mkdir(parents=True, exist_ok=True)
+        merlinenv_path = analysis_home / ".merlinenv"
 
         # DATA_HOME should point to the remapped data dir when reregistration
         # was used, so MERlin finds the remapped images.
@@ -496,9 +496,10 @@ class MerlinConfigStage(PipelineStage):
         # ---------------------------------------------------------------
         # 7. run_merLIN.sh
         # ---------------------------------------------------------------
-        run_script_path = merlin_data_dir / "run_merLIN.sh"
+        run_script_path = analysis_home / "run_merLIN.sh"
         _generate_run_script(
             merlin_data_dir=data_home,
+            merlinenv_dir=analysis_home,
             xp_name=xp_name,
             codebook_filename=codebook_filename or "codebook.csv",
             cores=self.config.merlin.cores,

@@ -72,6 +72,7 @@ class TestGenerateRunScript:
 
         _generate_run_script(
             merlin_data_dir=merlin_dir,
+            merlinenv_dir=merlin_dir,
             xp_name="XP001",
             codebook_filename="codebook.csv",
             cores=100,
@@ -92,6 +93,7 @@ class TestGenerateRunScript:
 
         _generate_run_script(
             merlin_data_dir=merlin_dir,
+            merlinenv_dir=merlin_dir,
             xp_name="XP001",
             codebook_filename="codebook.csv",
             cores=100,
@@ -111,6 +113,7 @@ class TestGenerateRunScript:
 
         _generate_run_script(
             merlin_data_dir=merlin_dir,
+            merlinenv_dir=merlin_dir,
             xp_name="XP001",
             codebook_filename="codebook.csv",
             cores=100,
@@ -131,6 +134,7 @@ class TestGenerateRunScript:
 
         _generate_run_script(
             merlin_data_dir=merlin_dir,
+            merlinenv_dir=merlin_dir,
             xp_name="XP001",
             codebook_filename="codebook.csv",
             cores=100,
@@ -148,6 +152,7 @@ class TestGenerateRunScript:
 
         _generate_run_script(
             merlin_data_dir=merlin_dir,
+            merlinenv_dir=merlin_dir,
             xp_name="XP001",
             codebook_filename="codebook.csv",
             cores=100,
