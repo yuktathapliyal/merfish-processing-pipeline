@@ -496,13 +496,10 @@ class MerlinConfigStage(PipelineStage):
         # DATA_HOME/<positional_arg> (e.g. output_dir/merlin_data).
         data_home = Path(self.config.paths.output_dir)
 
-        if rereg_info is not None:
-            data_dir = rereg_info["remapped_data_dir"]
-            self.logger.info(
-                "Using remapped data dir for MERlin: %s", data_dir,
-            )
-        else:
-            data_dir = merlin_data_dir
+        # Always use merlin_data_dir — convert always writes merged TIFFs
+        # there, regardless of whether reregistration was used.  Reregistration
+        # only affects n_z (target_z for data org expansion).
+        data_dir = merlin_data_dir
 
         _generate_merlinenv(
             data_home=data_home,
@@ -561,8 +558,8 @@ class MerlinConfigStage(PipelineStage):
         Returns
         -------
         dict or None
-            If reregistration ran successfully, returns a dict with keys
-            ``target_z`` (int) and ``remapped_data_dir`` (Path).
+            If reregistration ran successfully, returns a dict with key
+            ``target_z`` (int).
             Returns ``None`` if reregistration was not enabled or has no output.
         """
         if not self.config.reregistration.enabled:
@@ -584,8 +581,7 @@ class MerlinConfigStage(PipelineStage):
                     rereg_metadata_path,
                 )
                 return None
-            remapped_data_dir = Path(self.config.paths.remapped_data_dir)
-            return {"target_z": int(target_z), "remapped_data_dir": remapped_data_dir}
+            return {"target_z": int(target_z)}
         except (json.JSONDecodeError, KeyError) as exc:
             self.logger.warning(
                 "Could not parse reregistration metadata (%s): %s",

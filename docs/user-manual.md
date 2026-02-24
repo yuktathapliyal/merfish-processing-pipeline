@@ -488,8 +488,10 @@ segmentation:
   enabled: true
   aligned_images_dir: "/path/to/merlin_output/FiducialCorrelationWarp/images"  # required
   mode: "3d"                # segment all z-slices with 2D+stitch (default)
-  nuclei_bit: 17            # bit index for nuclei channel in dataorganization
+  nuclei_bit: 17            # 0-indexed bit for nuclei channel in dataorganization
   total_bits: 18            # total bits including nuclei + cell channels
+  exclude_bits: []          # additional 0-indexed bits to exclude from cytoplasm
+                            # (e.g. [0] to skip fiducial beads channel)
   median_kernel: 3          # median filter kernel size (odd integer)
   model_type: "cpsam"       # Cellpose model ("cyto2", "cpsam", etc.)
   diameter: null             # cell diameter in pixels (null = auto-detect)
@@ -508,6 +510,7 @@ segmentation:
   z_indexing: 1              # 1 = 1-indexed (default), 0 = 0-indexed
   nuclei_bit: 17
   total_bits: 18
+  exclude_bits: [0]         # e.g. skip fiducial beads (bit 0)
   model_type: "cpsam"
 ```
 

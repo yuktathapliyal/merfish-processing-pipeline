@@ -153,6 +153,7 @@ class SegmentationConfig(BaseModel):
     aligned_images_dir: Optional[Path] = None  # required when enabled
     nuclei_bit: int = 0
     total_bits: int = 16
+    exclude_bits: list[int] = []  # additional bits to exclude from cytoplasm sum (0-indexed)
     median_kernel: int = 3
     model_type: str = "cpsam"
     diameter: Optional[int] = None

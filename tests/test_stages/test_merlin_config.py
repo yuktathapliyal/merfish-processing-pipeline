@@ -207,7 +207,6 @@ class TestReregistrationDetection:
         result = stage._detect_reregistration()
         assert result is not None
         assert result["target_z"] == 11
-        assert result["remapped_data_dir"] == tmp_path / "remapped_data"
 
     def test_detect_returns_none_when_disabled(self, tmp_path):
         """When reregistration is disabled, should return None."""

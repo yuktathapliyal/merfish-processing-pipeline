@@ -115,25 +115,32 @@ def _preprocess_volume(
     total_bits: int,
     mf_kernel: int,
     z_index: int | None = None,
+    exclude_bits: list[int] | None = None,
 ) -> np.ndarray:
     """Extract and preprocess nuclei + cytoplasm channels from one FOV stack.
+
+    Matches the reference ``processZstacksForCellpose.py`` algorithm:
+    each plane is median-filtered and normalized independently (per-slice,
+    per-bit), and the cytoplasm channel is the sum of individually
+    normalized non-nuclei bit-planes.
 
     Parameters
     ----------
     tiff_path:
         Path to the aligned-image TIFF stack.
     nuclei_bit:
-        Index of the nuclei channel within the bit dimension.
+        0-based index of the nuclei channel within the bit dimension.
     total_bits:
-        Expected total number of bits (channels) in the stack.  Used to
-        validate the input and to determine which bits form the cytoplasm
-        channel.
+        Expected total number of bits (channels) in the stack.
     mf_kernel:
-        Kernel size for the :func:`cv2.medianBlur` filter.  Must be a
-        positive odd integer.
+        Kernel size for :func:`cv2.medianBlur`.  Must be a positive odd
+        integer.
     z_index:
         If provided (0-based), extract only this z-slice.  The output will
         still be 4-D with ``Z=1``.
+    exclude_bits:
+        Additional 0-based bit indices to exclude from the cytoplasm sum
+        (e.g. fiducial beads).  ``nuclei_bit`` is always excluded.
 
     Returns
     -------
@@ -149,13 +156,17 @@ def _preprocess_volume(
     """
     import cv2
 
+    if exclude_bits is None:
+        exclude_bits = []
+
     raw = read_tiff(tiff_path)
     logger.debug("Loaded %s with shape %s dtype %s", tiff_path.name, raw.shape, raw.dtype)
 
     # Determine Z, bits, Y, X from the raw shape.
-    # Typical shapes:
-    #   (Z, bits, Y, X)  -- 4-D
-    #   (Z*bits, Y, X)   -- 3-D, needs reshaping
+    # MERlin writes aligned_images as bit-major, z-minor:
+    #   bit0_z0, bit0_z1, ..., bit0_zN, bit1_z0, ..., bitM_zN
+    # So the flat 3-D shape is (bits*Z, Y, X) with bits changing slowest.
+    # We reshape to (bits, Z, Y, X) then transpose to (Z, bits, Y, X).
     if raw.ndim == 4:
         n_z, n_bits, h, w = raw.shape
     elif raw.ndim == 3:
@@ -171,7 +182,7 @@ def _preprocess_volume(
             )
         n_z = n_frames // total_bits
         n_bits = total_bits
-        raw = raw.reshape(n_z, n_bits, h, w)
+        raw = raw.reshape(n_bits, n_z, h, w).transpose(1, 0, 2, 3)
     else:
         raise ValueError(
             f"Unexpected TIFF shape {raw.shape} for {tiff_path.name}; "
@@ -193,29 +204,29 @@ def _preprocess_volume(
         raw = raw[z_index : z_index + 1, :, :, :]  # keep 4-D: (1, bits, Y, X)
         n_z = 1
 
-    # Extract nuclei channel: (Z, Y, X)
-    nuclei = raw[:, nuclei_bit, :, :].astype(np.float32)
+    # Determine which bits contribute to the cytoplasm channel
+    skip = {nuclei_bit} | set(exclude_bits)
+    cyto_bits = [b for b in range(n_bits) if b not in skip]
 
-    # Build cytoplasm channel: sum of all bits except nuclei across Z -> (Z, Y, X)
-    cyto_bits = [b for b in range(n_bits) if b != nuclei_bit]
-    if cyto_bits:
-        cyto = raw[:, cyto_bits, :, :].astype(np.float32).sum(axis=1)
-    else:
-        # Degenerate case: only one bit available.
-        cyto = np.zeros_like(nuclei)
+    # Build output volume with per-slice, per-bit normalization
+    # (matches reference processZstacksForCellpose.py)
+    vol = np.zeros((n_z, 2, h, w), dtype=np.float32)
 
-    # Apply median filter per z-slice
-    for z_idx in range(n_z):
-        nuclei[z_idx] = cv2.medianBlur(nuclei[z_idx], mf_kernel)
-        cyto[z_idx] = cv2.medianBlur(cyto[z_idx], mf_kernel)
+    for z in range(n_z):
+        # Nuclei channel (channel 1): median filter + normalize this slice
+        nuc_plane = raw[z, nuclei_bit].astype(np.float32)
+        nuc_plane = cv2.medianBlur(nuc_plane, mf_kernel)
+        vol[z, 1] = _normalize(nuc_plane)
 
-    # Normalize
-    nuclei = _normalize(nuclei)
-    cyto = _normalize(cyto)
+        # Cytoplasm channel (channel 0): sum of per-plane normalized bits
+        accum = np.zeros((h, w), dtype=np.float32)
+        for b in cyto_bits:
+            plane = raw[z, b].astype(np.float32)
+            plane = cv2.medianBlur(plane, mf_kernel)
+            accum += _normalize(plane)
+        vol[z, 0] = accum
 
-    # Assemble output: (Z, C=2, Y, X)
-    volume = np.stack([cyto, nuclei], axis=1)
-    return volume
+    return vol
 
 
 # ---------------------------------------------------------------------------
@@ -441,6 +452,7 @@ class SegmentationStage(PipelineStage):
                     total_bits=total_bits,
                     mf_kernel=median_kernel,
                     z_index=z_index,
+                    exclude_bits=list(seg_cfg.exclude_bits),
                 )
             except Exception as exc:
                 msg = f"Preprocessing failed for {fov_name}: {exc}"
