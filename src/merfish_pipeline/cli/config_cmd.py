@@ -162,6 +162,29 @@ def _build_template(microscope: str) -> dict:
         "reregistration": {
             "enabled": False,
         },
+        "filter_barcodes": {
+            "enabled": False,
+            "mode": "any",
+        },
+        "correlation": {
+            "enabled": False,
+            "bulk_file": None,
+        },
+        "segmentation": {
+            "enabled": False,
+            "aligned_images_dir": None,
+            "mode": "3d",
+            "nuclei_bit": 0,
+            "total_bits": 16,
+            "exclude_bits": [],
+            "model_type": "cpsam",
+            "diameter": None,
+            "median_kernel": 3,
+            "batch_size": 8,
+            "stitch_threshold": 0.5,
+            "reference_z_slice": None,
+            "z_indexing": 1,
+        },
         "pipeline": {
             "stages": ["index", "stitch", "focus_qc", "inspect_positions"],
         },

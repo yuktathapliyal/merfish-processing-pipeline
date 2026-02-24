@@ -11,7 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal, Optional
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, field_validator, model_validator
 
 from merfish_pipeline.config.defaults import (
     DEFAULT_DERIVED_PATHS,
@@ -164,6 +164,15 @@ class SegmentationConfig(BaseModel):
     mode: Literal["2d", "3d"] = "3d"
     reference_z_slice: Optional[int] = None  # required when mode="2d" (see z_indexing)
     z_indexing: Literal[0, 1] = 1  # 0 = 0-indexed, 1 = 1-indexed (default)
+
+    @field_validator("median_kernel")
+    @classmethod
+    def _check_median_kernel(cls, v: int) -> int:
+        if v <= 0 or v % 2 == 0:
+            raise ValueError(
+                f"median_kernel must be a positive odd integer, got {v}"
+            )
+        return v
 
 
 class CorrelationConfig(BaseModel):
