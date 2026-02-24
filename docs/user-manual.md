@@ -277,7 +277,8 @@ inspect_positions:
   trajectory_z_slices: null     # default: first 3 z-slices
 ```
 
-**Requires:** `index` stage completed.
+**Requires:** `index` stage completed, **or** `ims_convert` stage completed (ANDOR
+workflow -- reads per-round `stagePos_Round#N.csv` files from `merlin_data_dir`).
 
 ---
 
@@ -332,14 +333,15 @@ Automatically uses remapped data if reregistration was run.
 ### 7. `ims_convert` (Andor only)
 
 Converts Andor IMS (HDF5) files to the same merged TIFF format. Also extracts
-stage positions from IMS metadata.
+stage positions from IMS metadata and writes per-round position CSVs (used
+downstream by `inspect_positions` and `merlin_config`).
 
 **Output:**
 
 | File | Contents |
 |------|----------|
-| `ims_convert/merFISH_merged_{round}_{fov}.tiff` | Merged stacked TIFFs |
-| `ims_convert/stagePos_Round#{round}.csv` | Stage position CSVs |
+| `merlin_data/merFISH_merged_{round}_{fov}.tiff` | Merged stacked TIFFs (in `merlin_data_dir`) |
+| `merlin_data/stagePos_Round#{round}.csv` | Stage position CSVs (in `merlin_data_dir`) |
 
 **Config:**
 
@@ -348,6 +350,8 @@ raw_data:
   andor:
     channel_order: [0, 2, 1]    # channel reordering for your Andor setup
 ```
+
+**Requires:** Raw IMS files organised in round folders (e.g. `1st round/`, `R1/`).
 
 ---
 
@@ -504,11 +508,14 @@ merfish-pipe run my_experiment.yaml --stage correlation
 
 ```yaml
 pipeline:
-  stages: [index, focus_qc, inspect_positions, ims_convert, merlin_config]
+  stages: [ims_convert, inspect_positions, merlin_config]
 ```
 
-Same workflow but uses `ims_convert` instead of `convert`. No `stitch` for
-Andor.
+Andor uses `ims_convert` to convert IMS (HDF5) files to merged TIFFs and
+extract stage positions. `inspect_positions` reads the per-round position
+CSVs produced by `ims_convert` (no need to run `index` first). Stages
+like `stitch`, `focus_qc`, `reregistration`, and `convert` are not used
+in the Andor workflow.
 
 ### With reregistration
 

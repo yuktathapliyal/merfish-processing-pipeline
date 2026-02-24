@@ -579,14 +579,21 @@ class InspectPositionsStage(PipelineStage):
     # ------------------------------------------------------------------
 
     def validate_inputs(self) -> list[str]:
-        """Check that the standardized positions file from the index stage exists."""
+        """Check that position data is available.
+
+        Accepts either the ``index`` stage's ``positions.standardized.csv``
+        or per-round ``stagePos_Round#N.csv`` files produced by ``ims_convert``
+        (ANDOR workflow).
+        """
         errors: list[str] = []
 
         positions_path = self._positions_path()
         if not positions_path.exists():
             errors.append(
-                f"Normalised position file not found: {positions_path}  "
-                "(has the 'index' stage been run?)"
+                f"No position data found. Looked for:\n"
+                f"  1. {Path(self.config.paths.output_dir) / 'index' / 'positions.standardized.csv'}\n"
+                f"  2. stagePos_Round#N.csv files in {self.config.paths.merlin_data_dir}\n"
+                f"Has the 'index' or 'ims_convert' stage been run?"
             )
 
         return errors
@@ -721,8 +728,80 @@ class InspectPositionsStage(PipelineStage):
     # ------------------------------------------------------------------
 
     def _positions_path(self) -> Path:
-        """Return the expected path to the standardized positions file."""
-        return Path(self.config.paths.output_dir) / "index" / "positions.standardized.csv"
+        """Return the path to the best available positions file.
+
+        Resolution order:
+
+        1. ``{output_dir}/index/positions.standardized.csv`` -- produced by the
+           ``index`` stage (all microscope types).
+        2. Per-round ``stagePos_Round#N.csv`` files in ``merlin_data_dir`` --
+           produced by ``ims_convert`` (ANDOR workflow).  When found, they are
+           merged into a single ``{output_dir}/inspect_positions/positions.merged.csv``
+           with an added ``round`` column and that path is returned.
+        """
+        # Primary: index stage output
+        index_path = Path(self.config.paths.output_dir) / "index" / "positions.standardized.csv"
+        if index_path.exists():
+            return index_path
+
+        # Fallback: merge per-round stagePos CSVs from ims_convert
+        merged = self._merge_ims_convert_positions()
+        if merged is not None:
+            return merged
+
+        # Nothing found — return the primary path so validate_inputs can
+        # report the standard "index stage not run" message.
+        return index_path
+
+    def _merge_ims_convert_positions(self) -> Path | None:
+        """Merge per-round stagePos CSVs from ``ims_convert`` into one file.
+
+        Returns the merged file path, or *None* if no stagePos files exist.
+        """
+        import re
+
+        merlin_dir = Path(self.config.paths.merlin_data_dir)
+        if not merlin_dir.is_dir():
+            return None
+
+        stage_pos_re = re.compile(r"stagePos_Round#(\d+)\.csv$")
+        csv_files: list[tuple[int, Path]] = []
+        for p in sorted(merlin_dir.iterdir()):
+            m = stage_pos_re.match(p.name)
+            if m:
+                csv_files.append((int(m.group(1)), p))
+
+        if not csv_files:
+            return None
+
+        frames: list[pd.DataFrame] = []
+        for round_num, csv_path in csv_files:
+            try:
+                df = pd.read_csv(csv_path)
+                df["round"] = round_num
+                frames.append(df)
+            except Exception as exc:
+                self.logger.warning(
+                    "Could not read stagePos file %s: %s", csv_path, exc
+                )
+
+        if not frames:
+            return None
+
+        merged_df = pd.concat(frames, ignore_index=True)
+        # Reorder so 'round' is the first column
+        cols = ["round"] + [c for c in merged_df.columns if c != "round"]
+        merged_df = merged_df[cols]
+
+        out_dir = self.get_output_dir()
+        out_dir.mkdir(parents=True, exist_ok=True)
+        merged_path = out_dir / "positions.merged.csv"
+        merged_df.to_csv(merged_path, index=False)
+        self.logger.info(
+            "Merged %d stagePos files from ims_convert → %s (%d rows)",
+            len(csv_files), merged_path, len(merged_df),
+        )
+        return merged_path
 
     def _resolve_log_path(self) -> Optional[Path]:
         """Determine the microscope log path from config.
