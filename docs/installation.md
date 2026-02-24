@@ -59,6 +59,51 @@ just be slower.
 conda install -c conda-forge cellpose
 ```
 
+## Server / HPC install (conda + no-deps)
+
+On shared servers (e.g. Numbers, SLURM clusters), building C extensions from
+source often fails because the system GCC is too old or you don't have root
+access. The workaround is to let **conda** install the heavy compiled
+dependencies, then install only the pipeline package with `--no-deps` so pip
+doesn't try to rebuild anything.
+
+```bash
+# 1. Create a conda environment with all compiled dependencies
+conda create -n merfish-pipe python=3.12 \
+    numpy pandas h5py scikit-image opencv tifffile \
+    matplotlib seaborn openpyxl pyyaml click tqdm \
+    pytest pytest-cov \
+    -c conda-forge -y
+
+# 2. Activate the environment
+conda activate merfish-pipe
+
+# 3. Install pydantic via pip (not available on conda-forge with v2)
+pip install pydantic
+
+# 4. Install the pipeline itself -- no-deps tells pip to skip all
+#    dependencies and trust that conda already has them
+cd /path/to/merfish-processing-pipeline
+pip install -e . --no-deps
+```
+
+The `--no-deps` flag is the key: it installs **only** our package and skips
+pip's dependency resolver entirely. This avoids GCC build failures for
+packages like fastremap, h5py, and scikit-image.
+
+**Optional extras on the server:**
+
+```bash
+# Cellpose (for segmentation) -- install via conda to avoid build issues
+conda install -c conda-forge cellpose -y
+
+# AnnData (for h5ad export)
+pip install anndata
+
+# Plotly (for interactive trajectory plots)
+pip install plotly
+```
+
 ## Verify your install
 
 ```bash
