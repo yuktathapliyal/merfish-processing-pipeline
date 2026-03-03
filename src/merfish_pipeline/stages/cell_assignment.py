@@ -537,9 +537,9 @@ class CellAssignmentStage(PipelineStage):
             return Path(explicit)
 
         # 3. MERlin output
-        xp_name = self.config.experiment.name
+        merlin_data_name = Path(self.config.paths.merlin_data_dir).name
         merlin_output = (
-            output_dir / "merlin_analysis" / xp_name
+            output_dir / "merlin_analysis" / merlin_data_name
             / "ExportBarcodes" / "barcodes.csv"
         )
         if merlin_output.exists():

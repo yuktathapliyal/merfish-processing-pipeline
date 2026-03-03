@@ -509,9 +509,9 @@ class BarcodeQCStage(PipelineStage):
             return fb_output
 
         # MERlin output
-        xp_name = self.config.experiment.name
+        merlin_data_name = Path(self.config.paths.merlin_data_dir).name
         merlin_output = (
-            output_dir / "merlin_analysis" / xp_name
+            output_dir / "merlin_analysis" / merlin_data_name
             / "ExportBarcodes" / "barcodes.csv"
         )
         if merlin_output.exists():
@@ -527,8 +527,8 @@ class BarcodeQCStage(PipelineStage):
     def _resolve_plot_performance_dir(self) -> Path | None:
         """Try to find MERlin's PlotPerformance directory."""
         output_dir = Path(self.config.paths.output_dir)
-        xp_name = self.config.experiment.name
-        candidate = output_dir / "merlin_analysis" / xp_name / "PlotPerformance"
+        merlin_data_name = Path(self.config.paths.merlin_data_dir).name
+        candidate = output_dir / "merlin_analysis" / merlin_data_name / "PlotPerformance"
         if candidate.is_dir():
             return candidate
         return None

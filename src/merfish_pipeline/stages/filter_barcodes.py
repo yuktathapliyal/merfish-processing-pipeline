@@ -505,7 +505,7 @@ class FilterBarcodesStage(PipelineStage):
 
         Priority:
         1. Explicit ``filter_barcodes.barcodes_file`` config override.
-        2. Auto-detect at ``{output_dir}/merlin_analysis/{experiment}/ExportBarcodes/barcodes.csv``.
+        2. Auto-detect at ``{output_dir}/merlin_analysis/{merlin_data_dir.name}/ExportBarcodes/barcodes.csv``.
         """
         explicit = self.config.filter_barcodes.barcodes_file
         if explicit is not None:
@@ -513,9 +513,9 @@ class FilterBarcodesStage(PipelineStage):
 
         # Auto-detect from MERlin analysis output
         output_dir = Path(self.config.paths.output_dir)
-        xp_name = self.config.experiment.name
+        merlin_data_name = Path(self.config.paths.merlin_data_dir).name
         candidate = (
-            output_dir / "merlin_analysis" / xp_name / "ExportBarcodes" / "barcodes.csv"
+            output_dir / "merlin_analysis" / merlin_data_name / "ExportBarcodes" / "barcodes.csv"
         )
         if candidate.exists():
             return candidate
