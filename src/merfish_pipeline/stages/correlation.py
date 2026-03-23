@@ -489,31 +489,28 @@ class CorrelationStage(PipelineStage):
         """Resolve the barcodes input file.
 
         Priority:
-        1. Filtered barcodes from the ``filter_barcodes`` stage output.
-        2. Explicit ``filter_barcodes.barcodes_file`` config override.
-        3. MERlin output ``barcodes.csv`` under the MERlin data directory.
+        1. Explicit ``correlation.barcodes_file`` config override.
+        2. Filtered barcodes from the ``filter_barcodes`` stage output.
+        3. MERlin ``ExportBarcodes/barcodes.csv`` under merlin_analysis.
         """
-        # Check for filter_barcodes stage output first.
-        filter_output = (
-            Path(self.config.paths.output_dir)
-            / "filter_barcodes"
-            / "barcodes.csv"
-        )
+        output_dir = Path(self.config.paths.output_dir)
+
+        # 1. Explicit config override.
+        explicit = self.config.correlation.barcodes_file
+        if explicit is not None:
+            return Path(explicit)
+
+        # 2. filter_barcodes stage output.
+        filter_output = output_dir / "filter_barcodes" / "barcodes_filtered.csv"
         if filter_output.exists():
             return filter_output
 
-        # Explicit barcodes_file from filter_barcodes config.
-        if (
-            self.config.filter_barcodes.barcodes_file is not None
-            and Path(self.config.filter_barcodes.barcodes_file).exists()
-        ):
-            return Path(self.config.filter_barcodes.barcodes_file)
-
-        # Fallback to MERlin data directory.
-        if self.config.paths.merlin_data_dir is not None:
-            return Path(self.config.paths.merlin_data_dir) / "barcodes.csv"
-
-        return Path(self.config.paths.output_dir) / "barcodes.csv"
+        # 3. MERlin output.
+        merlin_data_name = Path(self.config.paths.merlin_data_dir).name
+        return (
+            output_dir / "merlin_analysis" / merlin_data_name
+            / "ExportBarcodes" / "barcodes.csv"
+        )
 
     def _resolve_codebook_file(self) -> Path | None:
         """Resolve the codebook CSV path from the MERlin config."""

@@ -195,6 +195,7 @@ class CorrelationConfig(BaseModel):
 
     enabled: bool = False
     bulk_file: Optional[Path] = None
+    barcodes_file: Optional[Path] = None
     distance_thresholds: list[float] = [0.5167, 0.50, 0.45, 0.40, 0.35, 0.30, 0.25]
 
 
