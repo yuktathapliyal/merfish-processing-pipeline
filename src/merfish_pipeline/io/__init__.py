@@ -10,8 +10,23 @@ tiff_io
     Optimized TIFF I/O with parallel read support.
 hdf5_io
     HDF5 / IMS reader for ANDOR microscope files.
+codebook
+    Codebook loading and blank-barcode helpers shared across stages.
+columns
+    Shared column-name candidate lists and detection helper for barcode
+    tables.
 """
 
+from merfish_pipeline.io.codebook import BLANK_RE, is_blank, load_codebook
+from merfish_pipeline.io.columns import (
+    FOV_CANDIDATES,
+    GLOBAL_X_CANDIDATES,
+    GLOBAL_Y_CANDIDATES,
+    LOCAL_X_CANDIDATES,
+    LOCAL_Y_CANDIDATES,
+    Z_CANDIDATES,
+    detect_column,
+)
 from merfish_pipeline.io.hdf5_io import (
     extract_stage_positions,
     list_ims_contents,
@@ -59,4 +74,16 @@ __all__ = [
     "read_ims_stack",
     "extract_stage_positions",
     "list_ims_contents",
+    # codebook
+    "BLANK_RE",
+    "is_blank",
+    "load_codebook",
+    # columns
+    "FOV_CANDIDATES",
+    "LOCAL_X_CANDIDATES",
+    "LOCAL_Y_CANDIDATES",
+    "GLOBAL_X_CANDIDATES",
+    "GLOBAL_Y_CANDIDATES",
+    "Z_CANDIDATES",
+    "detect_column",
 ]

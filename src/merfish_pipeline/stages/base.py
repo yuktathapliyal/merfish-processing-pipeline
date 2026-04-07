@@ -88,6 +88,42 @@ class PipelineStage(ABC):
         """Return the output directory for this stage."""
         return Path(self.config.paths.output_dir) / self.name
 
+    def _resolve_merlin_output_path(
+        self, subdir: str, filename: str
+    ) -> Path:
+        """Build a path to a file inside MERlin's analysis output tree.
+
+        MERlin writes its results to
+        ``{output_dir}/merlin_analysis/{merlin_data_dir.name}/<subdir>/<filename>``
+        where ``merlin_data_dir.name`` (default ``"merlin_data"``) is the
+        positional argument that ``run_merLIN.sh`` passes to MERlin -- *not*
+        the experiment name.  This helper centralises the path construction
+        so consumer stages don't have to remember the convention.
+
+        Parameters
+        ----------
+        subdir:
+            MERlin task directory name (e.g. ``"ExportBarcodes"`` or
+            ``"PlotPerformance"``).
+        filename:
+            Final filename inside *subdir* (e.g. ``"barcodes.csv"``).
+
+        Returns
+        -------
+        Path
+            The constructed path.  Existence is **not** checked -- callers
+            should call ``.exists()`` themselves.
+        """
+        output_dir = Path(self.config.paths.output_dir)
+        merlin_data_name = Path(self.config.paths.merlin_data_dir).name
+        return (
+            output_dir
+            / "merlin_analysis"
+            / merlin_data_name
+            / subdir
+            / filename
+        )
+
     def write_run_metadata(
         self,
         result: StageResult,
