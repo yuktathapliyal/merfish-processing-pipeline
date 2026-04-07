@@ -26,9 +26,10 @@ from pathlib import Path
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from matplotlib.backends.backend_pdf import PdfPages
 import numpy as np
 import pandas as pd
-from scipy.stats import pearsonr
+from scipy.stats import pearsonr, spearmanr
 
 from merfish_pipeline.io.sheet_io import read_sheet
 from merfish_pipeline.stages.base import PipelineStage, StageResult
@@ -131,7 +132,11 @@ def _find_progressive_groups(
     initial_temperature: float,
     cooling_rate: float,
     rng: random.Random,
-) -> tuple[dict[int, tuple[set[int], float]], list[tuple[int, float]]]:
+) -> tuple[
+    dict[int, tuple[set[int], float]],
+    list[tuple[int, float]],
+    dict[int, tuple[set[int], float]],
+]:
     """Run SA optimization across a range of target sizes.
 
     Returns
@@ -140,6 +145,9 @@ def _find_progressive_groups(
         ``{size: (best_indices, best_r)}`` for sizes where threshold was met.
     correlation_trend : list
         ``[(size, best_r), ...]`` for all tested sizes.
+    all_results_by_size : dict
+        ``{size: (best_indices, best_r)}`` for every tested size, regardless
+        of whether ``correlation_threshold`` was met.
     """
     log_tpm = df["log_tpm"].values
     log_counts = df["log_counts"].values
@@ -147,6 +155,7 @@ def _find_progressive_groups(
 
     results_by_size: dict[int, tuple[set[int], float]] = {}
     correlation_trend: list[tuple[int, float]] = []
+    all_results_by_size: dict[int, tuple[set[int], float]] = {}
 
     for target_size in size_range:
         if target_size > n_genes:
@@ -174,15 +183,86 @@ def _find_progressive_groups(
         correlation_trend.append((target_size, best_r))
         logger.info("  Size %3d: best r = %.4f", target_size, best_r)
 
+        if best_indices is not None:
+            all_results_by_size[target_size] = (best_indices, best_r)
+
         if best_r >= correlation_threshold and best_indices is not None:
             results_by_size[target_size] = (best_indices, best_r)
 
-    return results_by_size, correlation_trend
+    return results_by_size, correlation_trend, all_results_by_size
 
 
 # ---------------------------------------------------------------------------
 # Output helpers
 # ---------------------------------------------------------------------------
+
+
+def _plot_subgroup_scatter(
+    df_subset: pd.DataFrame,
+    ax: plt.Axes,
+    *,
+    group_size: int,
+    best_r: float,
+    xp_name: str,
+    with_labels: bool,
+) -> None:
+    """Scatter of log_tpm vs log_counts for one SA-selected subgroup.
+
+    Pearson + Spearman stats are always shown in the upper-left corner.
+    Gene labels are placed next to each point only when ``with_labels=True``.
+
+    Parameters
+    ----------
+    df_subset:
+        Dataframe with ``log_tpm``, ``log_counts``, and ``gene_symbol`` columns,
+        already restricted to the genes in this subgroup.
+    ax:
+        Matplotlib axes to draw on.
+    group_size:
+        Number of genes in this subgroup (shown in title and stats box).
+    best_r:
+        Best Pearson r found by SA at this size (logged for reference).
+    xp_name:
+        Experiment name used in the plot title.
+    with_labels:
+        If True, annotate each point with its ``gene_symbol``.
+    """
+    ax.scatter(df_subset["log_tpm"], df_subset["log_counts"], s=20, alpha=0.7)
+
+    if with_labels:
+        for _, row in df_subset.iterrows():
+            ax.text(
+                row["log_tpm"] + 0.02,
+                row["log_counts"],
+                str(row["gene_symbol"]),
+                fontsize=5,
+                alpha=0.8,
+            )
+
+    if len(df_subset) >= 3:
+        pr, _ = pearsonr(df_subset["log_tpm"], df_subset["log_counts"])
+        sr, _ = spearmanr(df_subset["log_tpm"], df_subset["log_counts"])
+        stats_text = (
+            f"Group size = {group_size}\n"
+            f"Pearson  = {pr:.2f}\n"
+            f"Spearman = {sr:.2f}"
+        )
+    else:
+        stats_text = f"Group size = {group_size}\n(too few points for stats)"
+
+    ax.text(
+        0.01, 0.95, stats_text,
+        transform=ax.transAxes,
+        verticalalignment="top",
+        fontsize=10,
+    )
+
+    title = f"Subgroup size {group_size}"
+    if xp_name:
+        title = f"{xp_name} -- {title}"
+    ax.set_title(title, fontsize=12)
+    ax.set_xlabel("log2(TPM + 1)", fontsize=11)
+    ax.set_ylabel("log2(counts + 1)", fontsize=11)
 
 
 def _plot_correlation_trend(
@@ -297,6 +377,8 @@ class OptimizeCorrelationStage(PipelineStage):
         return (
             (out / "correlation_trend.csv").exists()
             and (out / "optimal_genes.csv").exists()
+            and (out / "subgroup_correlations_unlabeled.pdf").exists()
+            and (out / "subgroup_correlations_labeled.pdf").exists()
         )
 
     def run(self, dry_run: bool = False) -> StageResult:
@@ -360,7 +442,7 @@ class OptimizeCorrelationStage(PipelineStage):
             cfg.n_attempts, cfg.max_iterations,
         )
 
-        results_by_size, correlation_trend = _find_progressive_groups(
+        results_by_size, correlation_trend, all_results_by_size = _find_progressive_groups(
             df,
             size_range=size_range,
             correlation_threshold=cfg.correlation_threshold,
@@ -418,6 +500,39 @@ class OptimizeCorrelationStage(PipelineStage):
         xlsx_path = output_dir / "detailed_results.xlsx"
         _save_detailed_results(results_by_size, df, xlsx_path)
         output_files.append(str(xlsx_path))
+
+        # 5. Per-subgroup scatter PDFs (one page per tested group size)
+        xp_name = self.config.experiment.name
+        unlabeled_pdf_path = output_dir / "subgroup_correlations_unlabeled.pdf"
+        labeled_pdf_path = output_dir / "subgroup_correlations_labeled.pdf"
+
+        with PdfPages(str(unlabeled_pdf_path)) as pdf_u, \
+             PdfPages(str(labeled_pdf_path)) as pdf_l:
+            for size in sorted(all_results_by_size):
+                indices, r = all_results_by_size[size]
+                sub_df = df.iloc[list(indices)][
+                    ["gene_symbol", "log_tpm", "log_counts"]
+                ].copy()
+
+                for pdf_obj, with_labels in ((pdf_u, False), (pdf_l, True)):
+                    fig, ax = plt.subplots(figsize=(9, 9))
+                    _plot_subgroup_scatter(
+                        sub_df, ax,
+                        group_size=size,
+                        best_r=r,
+                        xp_name=xp_name,
+                        with_labels=with_labels,
+                    )
+                    fig.tight_layout()
+                    pdf_obj.savefig(fig)
+                    plt.close(fig)
+
+        output_files.append(str(unlabeled_pdf_path))
+        output_files.append(str(labeled_pdf_path))
+        self.logger.info(
+            "Wrote per-subgroup scatter PDFs (%d pages each)",
+            len(all_results_by_size),
+        )
 
         # Build result
         metadata = {
