@@ -272,23 +272,27 @@ cell_assignment:
 ## `barcode_qc`
 
 **What it does:** Generates a comprehensive quality control report from the
-decoded barcodes. Computes summary statistics, per-gene/FOV/cell metrics, and
-creates a multi-panel PDF with diagnostic plots. This automates the manual QC
-analysis you'd otherwise do in a Jupyter notebook.
+decoded barcodes. Computes summary statistics, per-gene/FOV/cell metrics,
+signal-to-noise (SNR) contrast ratios, misidentification rates, and creates a
+multi-panel PDF with diagnostic plots. This automates the manual QC analysis
+you'd otherwise do in a Jupyter notebook.
 
 If the barcodes have a `Cell_ID` column (from `cell_assignment`), it also
 includes per-cell statistics. If MERlin's `PlotPerformance/` directory exists,
-it reads the distance-threshold correlation data from there.
+it reads the distance-threshold correlation data from there. If the barcodes
+have per-bit intensity columns (`intensity_0`..`intensity_N`) and a codebook is
+configured, it computes per-barcode SNR contrast and per-bit quality stats.
 
 **Output:**
 
 | File | What it contains |
 |------|-----------------|
-| `barcode_qc/qc_summary.csv` | A single-row table with all key metrics: total barcodes, unique genes, blank barcode rate, barcodes per FOV stats, barcodes per cell stats, optimal distance threshold, and correlation values. One row = one experiment summary. |
-| `barcode_qc/per_fov_stats.csv` | Barcode count and mean intensity per FOV. Useful for identifying FOVs with unusually low or high barcode counts. |
+| `barcode_qc/qc_summary.csv` | A single-row table with all key metrics: total barcodes, unique genes, blank barcode rate, barcodes per FOV stats, barcodes per cell stats, optimal distance threshold, correlation values, SNR contrast stats, and misidentification rate. One row = one experiment summary. |
+| `barcode_qc/per_fov_stats.csv` | Barcode count, mean intensity, SNR contrast median, and misidentification rate per FOV. Useful for identifying FOVs with unusually low signal quality. |
 | `barcode_qc/per_gene_stats.csv` | Barcode count per gene, sorted by abundance, with an `is_blank` flag. Blank genes (controls) should have much fewer barcodes than coding genes. |
+| `barcode_qc/per_bit_stats.csv` | Per-bit (per imaging round) intensity statistics: median ON-intensity, median OFF-intensity, and contrast ratio. Helps identify weak imaging rounds. Only created if per-bit intensity columns are present. |
 | `barcode_qc/per_cell_stats.csv` | Barcodes per cell and genes per cell. Only created if `Cell_ID` is present in the barcodes. |
-| `barcode_qc/qc_report.pdf` | A 6-panel diagnostic plot. See the [outputs guide](outputs-guide.md) for how to read each panel. |
+| `barcode_qc/qc_report.pdf` | Up to 8 diagnostic panels (depends on available data). See the [outputs guide](outputs-guide.md) for how to read each panel. |
 | `barcode_qc/spatial_plots/{name}_FOV_NNN.pdf` | One PDF per FOV showing barcode positions colored by distance to codebook. Each subplot is a different z-slice. Helps identify spatial patterns in decoding quality. |
 
 **What to check:** Start with `qc_report.pdf` -- it gives you a visual
@@ -297,11 +301,19 @@ the numbers. Key metrics to look at:
 - `blank_barcode_pct` -- should be low (< 5% for a good experiment)
 - `barcodes_per_fov_cv` -- coefficient of variation; low = uniform across FOVs
 - `barcodes_per_cell_median` -- typical range: 20--200 depending on tissue
+- `snr_contrast_median` -- above 0.5 is good, above 0.7 is excellent (see
+  explanation below)
+- `misid_rate` -- should be below 0.05 (5%); this is the gene-count-normalized
+  false positive rate estimated from blank control barcodes
 
 The per-FOV spatial plots in `spatial_plots/` show where barcodes are landing
 within each FOV. Red spots indicate barcodes far from their codebook entry
 (low confidence). Look for spatial patterns -- a corner of the FOV that's
 consistently red may indicate an optical issue.
+
+If `per_bit_stats.csv` shows one or two bits with much lower contrast than
+the rest, that imaging round may have had a problem (weak hybridisation, poor
+focus, or a bad readout probe).
 
 **Config:**
 
@@ -320,6 +332,116 @@ barcode_qc:
 3. MERlin `ExportBarcodes/barcodes.csv`
 
 **Requires:** MERlin completed externally + codebook configured.
+
+### Understanding the SNR and error metrics
+
+#### Background: why there's no standard merFISH "SNR"
+
+Published merFISH papers (Chen et al. 2015 *Science*; Moffitt et al. 2016
+*PNAS*, 2018 *Science*; Xia et al. 2019 *PNAS*) do **not** define a single
+"signal-to-noise ratio" formula. Instead, they report quality indirectly
+through:
+
+- **Per-bit error rates** -- e.g. 1→0 errors ~10%, 0→1 errors ~4% (Chen 2015)
+- **Confidence ratios** -- exact matches / (exact + single-error matches)
+- **Blank barcode rates** -- e.g. ~4% misidentification (Xia 2019)
+- **Correlation with bulk RNA-seq** -- Pearson r as a global quality check
+
+MERlin itself does not compute an intensity-based SNR either. Its adaptive
+filtering (`AdaptiveFilterBarcodes`) works in the space of (mean_intensity,
+min_distance, area) and uses blank barcode density to set thresholds.
+
+Because no established formula exists, this pipeline defines its own metrics
+based on the data MERlin provides. The rationale for each is explained below.
+
+#### Metric 1: ON/OFF contrast ratio
+
+Each merFISH barcode is an N-bit binary code. For example, with a 16-bit MHD4
+code, each barcode has exactly 4 bits set to 1 (ON) and 12 bits set to 0
+(OFF). MERlin records the decoded intensity for every bit as columns
+`intensity_0` through `intensity_N` in the barcodes CSV.
+
+> **Important:** These intensity values are **not raw fluorescence**. MERlin
+> normalises each pixel's intensity vector by dividing by per-bit scale factors
+> and then by the L2 norm. After normalisation, a perfect barcode with 4 ON
+> bits out of 16 would have ON-bit intensities ≈ 0.5 and OFF-bit intensities
+> ≈ 0. This normalisation is why the contrast ratio (rather than a simple
+> ratio) is the appropriate metric.
+
+The contrast ratio for each barcode is computed as:
+
+```
+contrast = (mean(ON_bits) − mean(OFF_bits)) / (mean(ON_bits) + mean(OFF_bits))
+```
+
+where ON_bits and OFF_bits are determined by looking up the barcode's binary
+pattern in the codebook.
+
+This formula is bounded between −1 and +1:
+
+| Value | Interpretation |
+|-------|---------------|
+| 1.0 | Perfect separation -- ON bits have all the signal, OFF bits are zero |
+| 0.7 -- 1.0 | Excellent -- clear distinction between ON and OFF |
+| 0.5 -- 0.7 | Good -- reasonable separation |
+| 0.3 -- 0.5 | Marginal -- ON/OFF bits are starting to blur together |
+| < 0.3 | Poor -- little separation; barcode decoding is unreliable |
+
+The thresholds above are tentative guidelines. They will be refined as more
+experiments are processed. The `qc_summary.csv` reports the experiment-wide
+median, mean, and standard deviation. The `per_fov_stats.csv` reports the
+median per FOV so you can identify FOVs with weaker signal.
+
+#### Metric 2: Misidentification rate
+
+This is the standard metric used in the merFISH literature (Xia et al. 2019;
+MERlin's `AdaptiveFilterBarcodes` default target is 5%). Blank control
+barcodes are binary codes that don't map to any real gene -- they're included
+in the codebook specifically to estimate the false positive rate.
+
+The formula is:
+
+```
+misid_rate = (blank_count / n_blank_genes) / (coding_count / n_coding_genes)
+```
+
+The numerator is the average number of barcodes per blank gene; the
+denominator is the average per coding gene. This normalises for the fact that
+there are usually fewer blank genes than coding genes.
+
+| Value | Interpretation |
+|-------|---------------|
+| < 0.05 (5%) | Good -- this is MERlin's default target |
+| 0.05 -- 0.10 | Acceptable but elevated |
+| > 0.10 | High false positive rate -- consider stricter distance filtering |
+
+This metric is also computed per FOV in `per_fov_stats.csv`. A FOV with a
+much higher misidentification rate than others may have imaging issues.
+
+#### Metric 3: Per-bit contrast
+
+The same contrast formula as Metric 1, but computed per bit position across
+all barcodes rather than per barcode. For bit *i*, the pipeline partitions
+all barcodes into those where bit *i* should be ON (according to the codebook)
+and those where it should be OFF, then computes the contrast from the median
+intensities of each group.
+
+This produces one row per bit in `per_bit_stats.csv`:
+
+| Column | Meaning |
+|--------|---------|
+| `bit_index` | Bit position (0-indexed) |
+| `bit_name` | Readout sequence name from the codebook (e.g. RS0015) |
+| `median_on` | Median intensity across barcodes where this bit is ON |
+| `median_off` | Median intensity across barcodes where this bit is OFF |
+| `contrast` | `(median_on − median_off) / (median_on + median_off)` |
+| `n_on` | Number of barcodes with this bit ON |
+| `n_off` | Number of barcodes with this bit OFF |
+
+**How to use:** If all bits have similar contrast (e.g. 0.85 -- 0.92), the
+imaging quality was uniform across rounds. If one or two bits have
+significantly lower contrast (e.g. 0.4 when others are 0.8+), that imaging
+round likely had a problem -- check the raw images for that readout sequence.
 
 ---
 

@@ -77,6 +77,7 @@ output_dir/
 │   ├── qc_summary.csv
 │   ├── per_fov_stats.csv
 │   ├── per_gene_stats.csv
+│   ├── per_bit_stats.csv
 │   ├── per_cell_stats.csv
 │   ├── qc_report.pdf
 │   └── spatial_plots/
@@ -308,12 +309,60 @@ of barcodes were successfully assigned. Typical values: 30--70% (some barcodes
 naturally fall outside cells). Consistently low assignment (< 20%) suggests
 segmentation problems.
 
+### `barcode_qc/qc_summary.csv` — SNR and error-rate columns
+
+In addition to the basic QC columns (total_barcodes, unique_genes,
+blank_barcode_pct, etc.), the summary includes these columns when per-bit
+intensity data is available:
+
+| Column | Meaning |
+|--------|---------|
+| `snr_contrast_median` | Median ON/OFF contrast ratio across all barcodes. Range: −1 to +1 (higher = better). Above 0.5 is good, above 0.7 is excellent. |
+| `snr_contrast_mean` | Mean ON/OFF contrast ratio. |
+| `snr_contrast_std` | Standard deviation of contrast. Low std = consistent quality. |
+| `misid_rate` | Misidentification rate estimated from blank barcodes. Should be below 0.05 (5%). Computed even without per-bit intensities. |
+
+See [stages-post-merlin.md — Understanding the SNR and error metrics](stages-post-merlin.md#understanding-the-snr-and-error-metrics)
+for the full explanation of how these are defined and why.
+
+### `barcode_qc/per_fov_stats.csv` — per-FOV SNR columns
+
+| Column | Meaning |
+|--------|---------|
+| `snr_contrast_median` | Median contrast ratio for barcodes in this FOV |
+| `misid_rate` | Per-FOV misidentification rate |
+
+Compare these across FOVs to spot spatial patterns in signal quality. A FOV
+with much lower SNR or higher misidentification rate than others may have had
+an imaging problem.
+
+### `barcode_qc/per_bit_stats.csv`
+
+One row per bit (imaging round). Helps identify weak readout sequences.
+
+| Column | Meaning |
+|--------|---------|
+| `bit_index` | Bit position (0-indexed, matches `intensity_0`, `intensity_1`, ...) |
+| `bit_name` | Readout sequence name from the codebook (e.g. RS0015) |
+| `median_on` | Median intensity for barcodes where this bit should be ON |
+| `median_off` | Median intensity for barcodes where this bit should be OFF |
+| `contrast` | `(median_on − median_off) / (median_on + median_off)` |
+| `n_on` | Number of barcodes contributing to the ON median |
+| `n_off` | Number of barcodes contributing to the OFF median |
+
+**Good:** All bits have similar contrast values (e.g. 0.85 -- 0.92).
+
+**Bad:** One or two bits with much lower contrast than the rest (e.g. 0.4
+when others are 0.8+). That readout sequence likely had a problem -- check the
+raw images for that imaging round.
+
 ---
 
 ## The QC report (`barcode_qc/qc_report.pdf`)
 
 This is the most important output for quickly assessing experiment quality. It
-contains 6 diagnostic panels:
+contains up to 8 diagnostic panels (6 base panels + 2 SNR panels when per-bit
+intensity data is available):
 
 ### Panel 1: Barcode abundance (top-left)
 
@@ -373,6 +422,32 @@ Horizontal bar chart of the N most abundant genes.
 
 **What to check:** Do the top genes make biological sense for your tissue type?
 Housekeeping genes often appear near the top.
+
+### Panel 7: SNR contrast distribution
+
+Histogram of the per-barcode ON/OFF contrast ratio. Only appears if the
+barcodes CSV has per-bit intensity columns (`intensity_0`..`intensity_N`) and
+a codebook is configured. The red dashed line marks the median. Colored
+vertical lines mark the quality thresholds: orange (0.3 = poor/marginal
+boundary), gold (0.5 = marginal/good), green (0.7 = good/excellent).
+
+**Good:** A narrow peak well above 0.5, ideally above 0.7. The further right
+the peak, the better the ON/OFF separation.
+
+**Bad:** A broad distribution centered below 0.5, or a bimodal shape with
+a second peak near 0. The low-contrast barcodes likely have decoding errors.
+
+### Panel 8: Per-bit ON/OFF contrast
+
+Bar chart showing the contrast ratio for each bit (imaging round). Bars are
+color-coded: green (>= 0.7), gold (0.5 -- 0.7), orange (0.3 -- 0.5), red
+(< 0.3). A gray dashed line marks 0.5.
+
+**Good:** All bars are similar height and green/gold.
+
+**Bad:** One or two bars are orange/red while the rest are green. That readout
+sequence had problems -- check the raw images for that imaging round. Possible
+causes: weak hybridisation, poor focus during that round, a bad readout probe.
 
 ---
 
