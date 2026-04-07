@@ -9,6 +9,7 @@ with automatic dependency tracking.
 from __future__ import annotations
 
 import logging
+import shlex
 from pathlib import Path
 from typing import Any
 
@@ -95,8 +96,17 @@ def generate_slurm_script(
             )
             sbatch_lines.append("fi")
 
-        # The actual submission command
-        cmd = f"merfish-pipe run \"{experiment_yaml}\" --profile slurm --stage {stage_name} --slurm-worker"
+        # The actual submission command.  ``shlex.quote`` ensures that paths
+        # or stage names containing spaces / quotes / shell metacharacters
+        # are passed safely to ``sbatch``.  Outer ``--wrap=`` quoting stays
+        # double-quoted so the surrounding ``${SBATCH_ARGS[@]}`` expansion
+        # and the ``awk`` subshell continue to work.
+        yaml_quoted = shlex.quote(str(experiment_yaml))
+        stage_quoted = shlex.quote(stage_name)
+        cmd = (
+            f"merfish-pipe run {yaml_quoted} --profile slurm "
+            f"--stage {stage_quoted} --slurm-worker"
+        )
         sbatch_lines.append(
             f'PREV_JOB_ID=$(sbatch "${{SBATCH_ARGS[@]}}" --wrap="{cmd}" | awk \'{{print $4}}\')'
         )

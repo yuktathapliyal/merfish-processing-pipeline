@@ -29,7 +29,6 @@ For every configured distance threshold (default
 
 from __future__ import annotations
 
-import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -42,22 +41,10 @@ import numpy as np
 import pandas as pd
 from scipy.stats import pearsonr, spearmanr
 
+from merfish_pipeline.io.codebook import is_blank
 from merfish_pipeline.io.sheet_io import read_sheet
 from merfish_pipeline.stages.base import PipelineStage, StageResult
 from merfish_pipeline.stages.registry import register_stage
-
-# ---------------------------------------------------------------------------
-# Blank barcode detection
-# ---------------------------------------------------------------------------
-
-#: Regex matching blank / control barcode names such as ``Blank_01``,
-#: ``blank-3``, ``Blank02``, etc.
-_BLANK_RE = re.compile(r"^[Bb]lank[-_]?\d+$")
-
-
-def _is_blank(gene_symbol: str) -> bool:
-    """Return ``True`` when *gene_symbol* matches the blank barcode pattern."""
-    return bool(_BLANK_RE.match(str(gene_symbol)))
 
 
 # ---------------------------------------------------------------------------
@@ -305,6 +292,18 @@ class CorrelationStage(PipelineStage):
                 error="Codebook or bulk expression file not configured.",
             )
 
+        # Defensive: validate_inputs() already checks for the barcodes file,
+        # but a `read_sheet` on a missing path would raise an opaque error.
+        if not barcodes_path.exists():
+            return StageResult(
+                status="failed",
+                error=(
+                    f"Barcodes file not found at {barcodes_path}. "
+                    "Run filter_barcodes / MERlin first, or set "
+                    "correlation.barcodes_file explicitly."
+                ),
+            )
+
         self.logger.info("Loading barcodes from %s", barcodes_path)
         barcodes_df = read_sheet(barcodes_path)
 
@@ -369,7 +368,7 @@ class CorrelationStage(PipelineStage):
                 n_genes = len(merged_cb)
 
                 # 2d. Identify blank barcodes
-                blank_mask = merged_cb["gene_symbol"].apply(_is_blank)
+                blank_mask = merged_cb["gene_symbol"].apply(is_blank)
                 n_blanks = int(blank_mask.sum())
                 blank_counts = int(
                     merged_cb.loc[blank_mask, "counts"].sum()

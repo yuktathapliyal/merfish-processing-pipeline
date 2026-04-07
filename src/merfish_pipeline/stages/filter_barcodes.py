@@ -29,8 +29,10 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 from pathlib import Path
+
 import pandas as pd
 
+from merfish_pipeline.io.columns import FOV_CANDIDATES, Z_CANDIDATES
 from merfish_pipeline.io.sheet_io import read_sheet, write_sheet
 from merfish_pipeline.stages.base import PipelineStage, StageResult
 from merfish_pipeline.stages.registry import register_stage
@@ -39,10 +41,6 @@ logger = logging.getLogger(__name__)
 
 # Required columns in the zmap CSV
 _ZMAP_REQUIRED_COLS = {"FOV", "IR", "new_z", "old_z", "is_duplicate"}
-
-# Candidate column names used for auto-detection in the barcodes CSV
-_FOV_CANDIDATES = ["fov", "FOV", "Fov"]
-_Z_CANDIDATES = ["z", "Z", "zIndex", "z_index", "zPos", "zpos"]
 
 
 # ---------------------------------------------------------------------------
@@ -68,12 +66,12 @@ def _detect_columns(df: pd.DataFrame) -> tuple[str, str]:
     fov_col: str | None = None
     z_col: str | None = None
 
-    for candidate in _FOV_CANDIDATES:
+    for candidate in FOV_CANDIDATES:
         if candidate in df.columns:
             fov_col = candidate
             break
 
-    for candidate in _Z_CANDIDATES:
+    for candidate in Z_CANDIDATES:
         if candidate in df.columns:
             z_col = candidate
             break
@@ -81,9 +79,9 @@ def _detect_columns(df: pd.DataFrame) -> tuple[str, str]:
     if fov_col is None or z_col is None:
         missing = []
         if fov_col is None:
-            missing.append(f"FOV (tried {_FOV_CANDIDATES})")
+            missing.append(f"FOV (tried {FOV_CANDIDATES})")
         if z_col is None:
-            missing.append(f"z (tried {_Z_CANDIDATES})")
+            missing.append(f"z (tried {Z_CANDIDATES})")
         raise ValueError(
             f"Cannot auto-detect barcodes columns: {', '.join(missing)}. "
             f"Available columns: {list(df.columns)}"
@@ -316,10 +314,10 @@ class FilterBarcodesStage(PipelineStage):
 
         barcodes_path = self._resolve_barcodes_path()
         if barcodes_path is None:
-            xp_name = self.config.experiment.name
+            merlin_data_name = Path(self.config.paths.merlin_data_dir).name
             expected = (
                 Path(self.config.paths.output_dir)
-                / "merlin_analysis" / xp_name / "ExportBarcodes" / "barcodes.csv"
+                / "merlin_analysis" / merlin_data_name / "ExportBarcodes" / "barcodes.csv"
             )
             errors.append(
                 f"Cannot locate barcodes.csv. Expected at {expected}. "

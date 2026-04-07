@@ -20,6 +20,7 @@ Algorithm
 
 from __future__ import annotations
 
+import logging
 import re
 from collections import defaultdict
 from datetime import datetime
@@ -37,6 +38,8 @@ import seaborn as sns
 from merfish_pipeline.io.path_utils import find_files_matching
 from merfish_pipeline.stages.base import PipelineStage, StageResult
 from merfish_pipeline.stages.registry import register_stage
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Filename parsing
@@ -92,8 +95,15 @@ def _focus_score(image: np.ndarray, sigma: float, ksize: int) -> float:
 
 def _best_z_for_stack(
     files: list[Path], sigma: float, ksize: int
-) -> tuple[str, list[float]]:
+) -> tuple[str | None, list[float]]:
     """Find the best-focus z-slice within a single (IR, FOV) stack.
+
+    Per-file read failures (``cv2.imread`` returning ``None`` for a corrupt
+    or unreadable TIFF) are logged and that file is skipped instead of
+    aborting the whole stage -- mirroring the missing-image handling that
+    ``reregistration`` already performs.  When *every* file in the stack
+    fails, ``best_z`` is ``None`` and the caller stores ``None`` for the
+    corresponding (FOV, IR) cell.
 
     Parameters
     ----------
@@ -107,9 +117,11 @@ def _best_z_for_stack(
     Returns
     -------
     best_z:
-        The zero-padded z-string of the slice with the highest score.
+        The zero-padded z-string of the slice with the highest score, or
+        ``None`` when all files in the stack failed to read.
     scores:
-        All computed scores in the same order as *files*.
+        All successfully computed scores (in the same order as the
+        successfully read *files*).  Empty when every file failed.
     """
     scores: list[float] = []
     z_labels: list[str] = []
@@ -117,10 +129,14 @@ def _best_z_for_stack(
     for path in files:
         img = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
         if img is None:
-            raise IOError(f"Could not read image: {path}")
+            logger.warning("Could not read image (skipping): %s", path)
+            continue
         scores.append(_focus_score(img, sigma=sigma, ksize=ksize))
         _, _, z = _parse_filename(path)
         z_labels.append(z)
+
+    if not scores:
+        return None, []
 
     best_idx = int(np.argmax(scores))
     return z_labels[best_idx], scores
