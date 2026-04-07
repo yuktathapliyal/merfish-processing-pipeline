@@ -93,6 +93,10 @@ correlation:
 **Requires:** MERlin completed externally + codebook configured
 (`merlin.codebook_template`).
 
+> **Note:** The bulk RNA-seq reference file is not included in the repository
+> (too large for Git). It is available on the shared data server alongside the
+> example datasets. Ask your lab for the path or download location.
+
 ---
 
 ## `optimize_correlation`

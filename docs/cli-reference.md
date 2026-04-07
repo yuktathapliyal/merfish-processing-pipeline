@@ -56,16 +56,26 @@ Configuration utilities: generate templates, validate, and inspect configs.
 
 ### `config init`
 
-Generate an annotated experiment config template for your microscope:
+Generate an experiment config template for your microscope:
 
 ```bash
+# Minimal template (quick to fill in)
 merfish-pipe config init --microscope oni -o my_experiment.yaml
-merfish-pipe config init --microscope nikon -o nikon_experiment.yaml
-merfish-pipe config init --microscope andor -o andor_experiment.yaml
+
+# Detailed template (richly commented, explains every field and stage)
+merfish-pipe config init --microscope oni --detailed -o my_experiment.yaml
 ```
 
-The template is pre-filled with sensible defaults and comments explaining each
-field. Edit the required fields before running.
+| Flag | What it does |
+|------|-------------|
+| `--microscope` | Required. One of `oni`, `nikon`, `andor`. |
+| `-o <path>` | Output file path. Prints to stdout if omitted. |
+| `--detailed` | Include extensive comments explaining every field, stage, and common workflows. |
+
+Without `--detailed`, you get a compact template with just the fields and
+defaults -- good when you already know the config system. With `--detailed`,
+you get the full reference template with inline documentation for every
+option.
 
 ### `config validate`
 
@@ -101,6 +111,62 @@ merfish-pipe status my_experiment.yaml
 
 Reads `run_metadata.json` from each stage's output directory and reports the
 status. Shows timestamps and runtime for completed stages.
+
+---
+
+## Stage dependencies
+
+Each stage needs certain inputs to exist before it can run. This table shows
+what each stage requires and what it auto-detects from previous stages.
+
+| Stage | Requires | Auto-detects from |
+|-------|----------|-------------------|
+| `index` | raw data directory | -- |
+| `stitch` | `index` | -- |
+| `focus_qc` | `index` | -- |
+| `inspect_positions` | `index` OR `ims_convert` | -- |
+| `reregistration` | `focus_qc` | -- |
+| `convert` | `index` (+ `reregistration` if enabled) | `remapped_data_dir` |
+| `ims_convert` | raw IMS files (ANDOR only) | -- |
+| `merlin_config` | `convert` OR `ims_convert` | reregistration metadata |
+| `filter_barcodes` | MERlin completed externally | `merlin_data_dir` |
+| `correlation` | `filter_barcodes` OR MERlin + `bulk_file` | filtered barcodes if available |
+| `optimize_correlation` | `correlation` | best threshold from `info_*.csv` |
+| `segmentation` | MERlin completed + `aligned_images_dir` | -- |
+| `cell_assignment` | `segmentation` + barcodes | masks dir, barcodes (filter_barcodes or MERlin) |
+| `barcode_qc` | barcodes + codebook | barcodes: `cell_assignment` > `filter_barcodes` > MERlin |
+| `anndata_export` | `cell_assignment` | -- |
+| `spatial_visualization` | barcodes | barcodes: `cell_assignment` > `filter_barcodes` > MERlin |
+
+> **Note:** MERlin runs externally (not a pipeline stage). After `merlin_config`
+> generates the launch files, you run MERlin yourself, then resume the pipeline
+> with `--from-stage filter_barcodes`.
+
+### Running a single stage
+
+```bash
+# Run just barcode_qc (assumes all upstream stages / MERlin are done)
+merfish-pipe run experiment.yaml --stage barcode_qc
+
+# Run from correlation onwards (skips preprocessing)
+merfish-pipe run experiment.yaml --from-stage correlation
+
+# Dry-run a single stage to check that its inputs exist
+merfish-pipe run experiment.yaml --stage segmentation --dry-run
+```
+
+### Auto-detection
+
+Many post-MERlin stages auto-detect their input files so you don't need to
+configure explicit paths. For example, `barcode_qc` checks for barcodes in
+this order:
+
+1. `cell_assignment/barcodes_assigned.csv` (preferred -- includes Cell_ID)
+2. `filter_barcodes/barcodes_filtered.csv`
+3. MERlin's `ExportBarcodes/barcodes.csv`
+
+You can override auto-detection with explicit config (e.g.
+`barcode_qc.barcodes_file: /path/to/barcodes.csv`).
 
 ---
 

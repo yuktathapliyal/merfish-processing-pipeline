@@ -121,13 +121,26 @@ pixel) are normal. Larger values mean the stage shifted significantly. The
 heatmap panel shows whether drift is uniform across all FOVs or concentrated
 in specific areas.
 
+The trajectory plot (`trajectory_plot.html`) defaults to showing the **first
+3 z-slices**, which can clutter the 3D view if the z-positions are close
+together. To reduce clutter, set `trajectory_z_slices` to a single slice or
+a specific set:
+
+```yaml
+# Show only the first z-slice (cleanest view)
+trajectory_z_slices: [0]
+
+# Show specific z-slices (0-indexed)
+trajectory_z_slices: [0, 5, 10]
+```
+
 **Config:**
 
 ```yaml
 inspect_positions:
   log_file: null                # auto-detected from raw data directory
   rounds_to_check: null         # check all rounds (or specify e.g. [1, 5, 9])
-  trajectory_z_slices: null     # default: first 3 z-slices for trajectory plot
+  trajectory_z_slices: null     # default: first 3 z-slices. Set to [0] for a single slice.
 ```
 
 **Requires:** `index` stage completed, **or** `ims_convert` stage completed

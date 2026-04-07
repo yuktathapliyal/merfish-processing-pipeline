@@ -30,27 +30,41 @@ def config() -> None:
     type=click.Path(path_type=Path),
     help="Output file path. Defaults to stdout.",
 )
-def init(microscope: str, output: Path | None) -> None:
-    """Generate an annotated experiment config template.
+@click.option(
+    "--detailed",
+    is_flag=True,
+    default=False,
+    help="Generate a richly-commented template with full documentation for every field.",
+)
+def init(microscope: str, output: Path | None, detailed: bool) -> None:
+    """Generate an experiment config template.
 
     Produces a YAML template pre-filled with the selected microscope's defaults.
     Edit the paths and stage list to match your experiment.
+
+    Use --detailed for a version with extensive comments explaining every field
+    and stage. Without --detailed, you get a minimal template that's quick to
+    fill in.
     """
-    template = _build_template(microscope.lower())
+    if detailed:
+        content = _load_detailed_template(microscope.lower())
+    else:
+        template = _build_template(microscope.lower())
 
-    yaml_text = yaml.dump(template, default_flow_style=False, sort_keys=False)
+        yaml_text = yaml.dump(template, default_flow_style=False, sort_keys=False)
 
-    # Add a header comment
-    header = (
-        f"# merFISH Pipeline — Experiment Configuration Template\n"
-        f"# Microscope: {microscope.upper()}\n"
-        f"#\n"
-        f"# Edit the paths and settings below for your experiment.\n"
-        f"# Run: merfish-pipe config validate <this_file>\n"
-        f"#\n\n"
-    )
+        # Add a header comment
+        header = (
+            f"# merFISH Pipeline — Experiment Configuration Template\n"
+            f"# Microscope: {microscope.upper()}\n"
+            f"#\n"
+            f"# Edit the paths and settings below for your experiment.\n"
+            f"# Run: merfish-pipe config validate <this_file>\n"
+            f"# Tip: use --detailed for a fully-commented version.\n"
+            f"#\n\n"
+        )
 
-    content = header + yaml_text
+        content = header + yaml_text
 
     if output:
         output.parent.mkdir(parents=True, exist_ok=True)
@@ -124,6 +138,26 @@ def show(experiment: Path, profile: str, as_json: bool) -> None:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _load_detailed_template(microscope: str) -> str:
+    """Load the richly-commented XP_template.yaml and patch the microscope."""
+    # Locate configs/experiments/ relative to the package root
+    pkg_root = Path(__file__).resolve().parents[2]  # src/merfish_pipeline/cli -> src
+    template_path = pkg_root.parent / "configs" / "experiments" / "XP_template.yaml"
+
+    if not template_path.exists():
+        raise click.ClickException(
+            f"Detailed template not found at {template_path}. "
+            f"Use config init without --detailed, or ensure the configs/ "
+            f"directory is present in the repository."
+        )
+
+    text = template_path.read_text(encoding="utf-8")
+    # Replace the microscope placeholder in the template
+    text = text.replace('microscope: "oni"', f'microscope: "{microscope}"')
+    text = text.replace("microscope: oni", f'microscope: "{microscope}"')
+    return text
 
 
 def _build_template(microscope: str) -> dict:
