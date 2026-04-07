@@ -631,6 +631,7 @@ def _generate_spatial_plots(
     for fov, df_fov in barcodes.groupby(fov_col):
         fig, axs = plt.subplots(
             n_rows, n_cols, figsize=(4.5 * n_cols, 4 * n_rows),
+            constrained_layout=True,
         )
         axs = np.asarray(axs).flatten()
 
@@ -665,16 +666,14 @@ def _generate_spatial_plots(
 
         if sc is not None:
             cbar = fig.colorbar(
-                sc, ax=list(axs), orientation="vertical",
-                fraction=0.02, pad=0.04,
+                sc, ax=axs.tolist(), orientation="vertical",
             )
             cbar.set_label("Mean Distance to codebook")
 
-        fig.suptitle(f"{experiment_name} -- FOV {int(fov):03d}", fontsize=14, y=1.02)
-        fig.tight_layout()
+        fig.suptitle(f"{experiment_name} -- FOV {int(fov):03d}", fontsize=14)
 
         pdf_path = output_dir / f"{experiment_name}_FOV_{int(fov):03d}.pdf"
-        fig.savefig(pdf_path, bbox_inches="tight")
+        fig.savefig(pdf_path)
         plt.close(fig)
         output_files.append(str(pdf_path))
 
