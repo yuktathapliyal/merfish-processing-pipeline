@@ -35,7 +35,7 @@ Raw Images --> [Pre-processing & QC] --> [Reregistration & Conversion] --> MERli
 | **NIKON** | Per-channel TIFF directories | `convert` |
 | **ANDOR** | HDF5 `.ims` files | `ims_convert` |
 
-## The 14 stages at a glance
+## The 16 stages at a glance
 
 | # | Stage | Phase | What it does |
 |---|-------|-------|-------------|
@@ -49,10 +49,12 @@ Raw Images --> [Pre-processing & QC] --> [Reregistration & Conversion] --> MERli
 | 8 | `merlin_config` | Reregistration & Conversion | Generate MERlin parameter files and launch script |
 | 9 | `filter_barcodes` | Post-MERlin | Remove duplicate barcodes from reregistration |
 | 10 | `correlation` | Post-MERlin | Validate barcode counts against bulk RNA-seq |
-| 11 | `segmentation` | Post-MERlin | Cellpose cell segmentation on aligned images |
-| 12 | `cell_assignment` | Post-MERlin | Assign decoded barcodes to segmented cells |
-| 13 | `barcode_qc` | Post-MERlin | Generate QC metrics and diagnostic PDF report |
-| 14 | `anndata_export` | Post-MERlin | Export cell-by-gene matrix to AnnData h5ad |
+| 11 | `optimize_correlation` | Post-MERlin | Find gene subgroups that maximize bulk correlation |
+| 12 | `segmentation` | Post-MERlin | Cellpose cell segmentation on aligned images |
+| 13 | `cell_assignment` | Post-MERlin | Assign decoded barcodes to segmented cells |
+| 14 | `barcode_qc` | Post-MERlin | Generate QC metrics, per-FOV spatial plots, and diagnostic PDF |
+| 15 | `anndata_export` | Post-MERlin | Export cell-by-gene matrix to AnnData h5ad |
+| 16 | `spatial_visualization` | Post-MERlin | Interactive 3D barcode visualization (plotly) |
 
 ## Documentation
 
@@ -62,7 +64,7 @@ Raw Images --> [Pre-processing & QC] --> [Reregistration & Conversion] --> MERli
 | [Configuration](configuration.md) | The config system, creating your experiment YAML, validation |
 | [Pre-processing Stages](stages-preprocessing.md) | Stages 1--4: index, stitch, focus_qc, inspect_positions |
 | [Reregistration & Conversion Stages](stages-reregistration.md) | Stages 5--8: reregistration, convert, ims_convert, merlin_config |
-| [Post-MERlin Stages](stages-post-merlin.md) | Stages 9--14: filter_barcodes through anndata_export |
+| [Post-MERlin Stages](stages-post-merlin.md) | Stages 9--16: filter_barcodes through spatial_visualization |
 | [Workflows](workflows.md) | End-to-end examples for ONI, NIKON, and ANDOR |
 | [Understanding Your Outputs](outputs-guide.md) | What each output file contains and how to interpret it |
 | [CLI Reference](cli-reference.md) | All commands, flags, and examples |

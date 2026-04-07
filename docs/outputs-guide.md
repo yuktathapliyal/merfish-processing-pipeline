@@ -59,7 +59,13 @@ output_dir/
 │   └── barcodes_filtered.csv
 ├── correlation/                   (if enabled)
 │   ├── info_{name}.csv
+│   ├── merged_counts/
 │   └── correlation_plots.pdf
+├── optimize_correlation/          (if enabled)
+│   ├── correlation_trend.csv
+│   ├── correlation_trend.png
+│   ├── optimal_genes.csv
+│   └── detailed_results.xlsx
 ├── segmentation/                  (if enabled)
 │   ├── preprocessed/
 │   └── masks/
@@ -72,11 +78,15 @@ output_dir/
 │   ├── per_fov_stats.csv
 │   ├── per_gene_stats.csv
 │   ├── per_cell_stats.csv
-│   └── qc_report.pdf
-└── anndata_export/               (if enabled)
-    ├── {experiment}.h5ad
-    ├── cell_gene_matrix.csv
-    └── cell_metadata.csv
+│   ├── qc_report.pdf
+│   └── spatial_plots/
+│       └── {name}_FOV_*.pdf
+├── anndata_export/               (if enabled)
+│   ├── {experiment}.h5ad
+│   ├── cell_gene_matrix.csv
+│   └── cell_metadata.csv
+└── spatial_visualization/        (if enabled)
+    └── spatial_3d.html
 ```
 
 Every stage writes a `run_metadata.json` file in its output directory with
@@ -219,6 +229,54 @@ the origin.
 
 **Bad:** Points are scattered with no correlation. Many genes at zero in one
 axis but not the other.
+
+### `optimize_correlation/correlation_trend.png`
+
+A line plot showing the best Pearson correlation achieved at each gene group
+size. The x-axis is group size, the y-axis is correlation. A red dashed line
+marks your configured threshold.
+
+**Good:** The curve rises steeply at small group sizes and plateaus around your
+full panel size. This means most genes in your panel contribute positively to
+the correlation.
+
+**Bad:** The curve peaks at a small group size (e.g. 20--30 genes) then drops
+as more genes are added. The genes beyond the peak are hurting your correlation
+-- check `optimal_genes.csv` to see which genes perform well and which don't.
+
+### `optimize_correlation/optimal_genes.csv`
+
+The gene list for the best-performing group. Each row has the gene name, its
+merFISH count (log-transformed), and bulk expression (log-transformed).
+
+Use this to compare against your full panel -- genes missing from this list
+may have probe issues or may not be well-expressed in this particular tissue.
+
+### `barcode_qc/spatial_plots/*.pdf`
+
+One PDF per FOV. Each PDF has a grid of scatter plots (one per z-slice)
+showing barcode positions colored by distance to their codebook entry. The
+colormap goes from dark red (close match, high confidence) to white (far
+from codebook, low confidence).
+
+**Good:** Barcodes are spread across the FOV with mostly dark colors. The
+spatial distribution looks uniform.
+
+**Bad:** A cluster of white/light points in one region suggests a localized
+imaging problem (e.g. out-of-focus corner, illumination gradient). Empty
+z-slices at the top or bottom may indicate the z-stack doesn't cover the
+full tissue thickness.
+
+### `spatial_visualization/spatial_3d.html`
+
+An interactive 3D scatter plot you open in a web browser. Each point is a
+decoded barcode placed at its (x, y, z) coordinates. Use the dropdown to
+switch between FOVs and between gene-colored and cell-colored views. Hover
+over points to see gene names and cell IDs.
+
+**How to use:** Open the HTML file in Chrome or Firefox. Click and drag to
+rotate. Scroll to zoom. Use the dropdown in the top-left to pick a FOV
+and coloring mode.
 
 ### `segmentation/masks/fov_*_masks.tif`
 

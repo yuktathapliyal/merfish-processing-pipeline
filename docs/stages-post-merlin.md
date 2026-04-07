@@ -1,4 +1,4 @@
-# Post-MERlin Analysis (Stages 9--14)
+# Post-MERlin Analysis (Stages 9--16)
 
 These stages run **after MERlin has finished decoding barcodes**. They operate
 on the `ExportBarcodes/barcodes.csv` file that MERlin produces -- a table with
@@ -92,6 +92,59 @@ correlation:
 
 **Requires:** MERlin completed externally + codebook configured
 (`merlin.codebook_template`).
+
+---
+
+## `optimize_correlation`
+
+**What it does:** Takes the gene-level correlation data from the `correlation`
+stage and searches for the subset of genes that gives the best possible
+correlation with your bulk RNA-seq reference. It uses a technique called
+simulated annealing -- a randomized optimization algorithm that tries swapping
+genes in and out of a group to maximize the Pearson correlation.
+
+This is useful for identifying which genes in your panel are performing well
+and which are dragging down the overall correlation. It also helps determine
+the right panel size -- the stage tests group sizes from small (5 genes) up to
+large (120 genes) and shows how correlation changes with group size.
+
+**When to use:** After running `correlation`, when you want to understand which
+genes are contributing to or hurting your experiment's correlation with bulk
+data. Particularly useful for panel design and troubleshooting low-performing
+experiments.
+
+**Output:**
+
+| File | What it contains |
+|------|-----------------|
+| `optimize_correlation/correlation_trend.csv` | One row per group size tested: the size and the best Pearson correlation achieved at that size. |
+| `optimize_correlation/correlation_trend.png` | Line plot showing how correlation changes with group size. The red dashed line marks your correlation threshold. |
+| `optimize_correlation/optimal_genes.csv` | The gene list for the best-performing group: gene symbol, log-transformed merFISH counts, log-transformed bulk expression, and the group's correlation value. |
+| `optimize_correlation/detailed_results.xlsx` | Excel workbook with a summary sheet and one sheet per group size, listing the genes in each optimized group. |
+
+**What to check:** Look at `correlation_trend.png` first. Correlation typically
+increases with group size up to a point, then plateaus or drops as weaker genes
+get included. The peak tells you the effective panel size. Check
+`optimal_genes.csv` to see which genes made it into the best group -- genes
+that never appear in any optimized group may have probe issues.
+
+**Config:**
+
+```yaml
+optimize_correlation:
+  enabled: true
+  correlation_threshold: 0.45   # minimum Pearson r to accept a group
+  n_attempts: 5                 # independent optimization runs per size
+  # size_range_start: 5         # smallest group size to test
+  # size_range_end: 120         # largest group size to test
+  # size_range_step: 5          # step between sizes
+  # max_iterations: 2000        # SA iterations per attempt
+  # cooling_rate: 0.995         # temperature decay rate
+  # distance_threshold: null    # which correlation threshold's data to use (auto-selects best)
+  # random_seed: null           # set for reproducible results
+```
+
+**Requires:** `correlation` stage completed (reads its `merged_counts/` output).
 
 ---
 
@@ -236,6 +289,7 @@ it reads the distance-threshold correlation data from there.
 | `barcode_qc/per_gene_stats.csv` | Barcode count per gene, sorted by abundance, with an `is_blank` flag. Blank genes (controls) should have much fewer barcodes than coding genes. |
 | `barcode_qc/per_cell_stats.csv` | Barcodes per cell and genes per cell. Only created if `Cell_ID` is present in the barcodes. |
 | `barcode_qc/qc_report.pdf` | A 6-panel diagnostic plot. See the [outputs guide](outputs-guide.md) for how to read each panel. |
+| `barcode_qc/spatial_plots/{name}_FOV_NNN.pdf` | One PDF per FOV showing barcode positions colored by distance to codebook. Each subplot is a different z-slice. Helps identify spatial patterns in decoding quality. |
 
 **What to check:** Start with `qc_report.pdf` -- it gives you a visual
 overview of experiment quality in one page. Then check `qc_summary.csv` for
@@ -244,13 +298,20 @@ the numbers. Key metrics to look at:
 - `barcodes_per_fov_cv` -- coefficient of variation; low = uniform across FOVs
 - `barcodes_per_cell_median` -- typical range: 20--200 depending on tissue
 
+The per-FOV spatial plots in `spatial_plots/` show where barcodes are landing
+within each FOV. Red spots indicate barcodes far from their codebook entry
+(low confidence). Look for spatial patterns -- a corner of the FOV that's
+consistently red may indicate an optical issue.
+
 **Config:**
 
 ```yaml
 barcode_qc:
   enabled: true
-  top_n_genes: 20           # how many top genes to show in the report
-  # barcodes_file: null     # auto-detected
+  top_n_genes: 20              # how many top genes to show in the report
+  spatial_plots_enabled: true  # generate per-FOV scatter plots (one PDF each)
+  spatial_plots_columns: 3     # columns in the z-slice subplot grid
+  # barcodes_file: null        # auto-detected
 ```
 
 **Auto-detection (barcodes):**
@@ -303,6 +364,54 @@ anndata_export:
 `pip install -e ".[export]"`. The CSV fallback always works without it.
 
 **Requires:** `cell_assignment` stage completed + codebook configured.
+
+---
+
+## `spatial_visualization`
+
+**What it does:** Creates an interactive 3D scatter plot of all decoded
+barcodes, viewable in any web browser. Each barcode is placed at its spatial
+coordinates (x, y, z), and you can rotate, zoom, and pan to explore the
+tissue in three dimensions. A dropdown lets you switch between FOVs and between
+two coloring modes:
+
+- **Gene-colored:** Each barcode is colored by which gene it was decoded as.
+  Useful for seeing where specific genes are expressed in the tissue.
+- **Cell-colored:** Each barcode is colored by which cell it was assigned to
+  (from `cell_assignment`). Unassigned barcodes are shown in dim gray. Only
+  available when Cell_ID is present.
+
+**When to use:** After all other analysis is done. This is a visualization
+stage -- it doesn't produce data for downstream analysis, but it's a powerful
+way to explore the spatial distribution of gene expression in your tissue.
+
+**Output:**
+
+| File | What it contains |
+|------|-----------------|
+| `spatial_visualization/spatial_3d.html` | Interactive plotly HTML file. Open in a browser to explore. Use the dropdown in the top-left to switch between FOVs and coloring modes. |
+
+**What to check:** Rotate the 3D view to confirm barcodes are distributed
+across all z-slices (not concentrated in just one). In gene-colored mode, look
+for spatial clustering of specific genes -- this is expected for genes with
+known spatial expression patterns. In cell-colored mode, check that cells form
+coherent spatial clusters rather than a random salt-and-pepper pattern.
+
+**Config:**
+
+```yaml
+spatial_visualization:
+  enabled: true
+  # marker_size: 2            # size of scatter points
+  # max_points: null           # downsample to this many barcodes (null = all)
+  # barcodes_file: null        # auto-detected
+```
+
+**Install:** Requires `plotly`: `pip install -e ".[viz]"`. The stage skips
+gracefully if plotly is not installed.
+
+**Requires:** MERlin completed externally + codebook configured. Best results
+when `cell_assignment` has been run (enables cell-colored view).
 
 ---
 

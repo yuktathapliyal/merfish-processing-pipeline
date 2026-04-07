@@ -50,6 +50,10 @@ merfish-pipe run my_experiment.yaml --stage cell_assignment
 merfish-pipe run my_experiment.yaml --stage correlation
 merfish-pipe run my_experiment.yaml --stage barcode_qc
 merfish-pipe run my_experiment.yaml --stage anndata_export
+
+# 5. Optional: find optimal gene subgroups and explore spatial data
+merfish-pipe run my_experiment.yaml --stage optimize_correlation
+merfish-pipe run my_experiment.yaml --stage spatial_visualization
 ```
 
 ---
@@ -119,6 +123,10 @@ merfish-pipe run my_experiment.yaml --stage cell_assignment
 merfish-pipe run my_experiment.yaml --stage correlation
 merfish-pipe run my_experiment.yaml --stage barcode_qc
 merfish-pipe run my_experiment.yaml --stage anndata_export
+
+# 8. Optional: gene optimization and 3D visualization
+merfish-pipe run my_experiment.yaml --stage optimize_correlation
+merfish-pipe run my_experiment.yaml --stage spatial_visualization
 ```
 
 ---
@@ -167,6 +175,10 @@ bash output/merlin_analysis/run_merLIN.sh
 # 4. Post-MERlin analysis
 merfish-pipe run my_experiment.yaml --stage correlation
 merfish-pipe run my_experiment.yaml --stage barcode_qc
+
+# 5. Optional: gene optimization and 3D visualization
+merfish-pipe run my_experiment.yaml --stage optimize_correlation
+merfish-pipe run my_experiment.yaml --stage spatial_visualization
 ```
 
 **Notes:**
