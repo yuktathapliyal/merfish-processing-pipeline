@@ -8,6 +8,7 @@ Outputs
 - ``{output_dir}/barcode_qc/qc_summary.csv``
 - ``{output_dir}/barcode_qc/per_fov_stats.csv``
 - ``{output_dir}/barcode_qc/per_gene_stats.csv``
+- ``{output_dir}/barcode_qc/per_bit_stats.csv``  (only if intensity columns present)
 - ``{output_dir}/barcode_qc/per_cell_stats.csv``  (only if Cell_ID present)
 - ``{output_dir}/barcode_qc/qc_report.pdf``
 - ``{output_dir}/barcode_qc/spatial_plots/{experiment}_FOV_{NNN}.pdf``  (per-FOV)
@@ -56,6 +57,27 @@ def _detect_column(df: pd.DataFrame, candidates: list[str], label: str) -> str:
 
 def _is_blank(gene_symbol: str) -> bool:
     return bool(_BLANK_RE.match(str(gene_symbol)))
+
+
+def _find_intensity_columns(df: pd.DataFrame) -> list[str]:
+    """Find ``intensity_0``, ``intensity_1``, ... columns in *df*."""
+    cols = sorted(
+        [c for c in df.columns if re.match(r"^intensity_\d+$", c)],
+        key=lambda c: int(c.split("_")[1]),
+    )
+    return cols
+
+
+def _get_bit_columns(codebook: pd.DataFrame) -> list[str]:
+    """Identify binary 0/1 bit columns in a codebook (e.g. RS0015, RS0083)."""
+    skip = {"name", "gene_name", "gene_symbol", "id", "barcode_id"}
+    candidates = [c for c in codebook.columns if c not in skip]
+    bit_cols = []
+    for c in candidates:
+        vals = codebook[c].dropna().unique()
+        if len(vals) > 0 and set(vals).issubset({0, 1, 0.0, 1.0}):
+            bit_cols.append(c)
+    return bit_cols
 
 
 # ---------------------------------------------------------------------------
@@ -207,6 +229,192 @@ def _compute_summary(
 
 
 # ---------------------------------------------------------------------------
+# SNR / error-rate metrics
+# ---------------------------------------------------------------------------
+
+
+def _compute_snr_stats(
+    barcodes: pd.DataFrame,
+    codebook: pd.DataFrame,
+    intensity_cols: list[str],
+) -> tuple[np.ndarray, dict] | None:
+    """Compute per-barcode ON/OFF contrast ratio.
+
+    ``contrast = (mean(ON) - mean(OFF)) / (mean(ON) + mean(OFF))``
+
+    Returns ``(contrast_array, summary_dict)`` or *None* if computation is
+    not possible.  ``contrast_array`` has one value per barcode row (NaN for
+    barcodes with no codebook match).
+    """
+    bit_cols = _get_bit_columns(codebook)
+    n_bits = len(intensity_cols)
+
+    if not bit_cols:
+        logger.warning("No bit columns found in codebook; skipping SNR.")
+        return None
+
+    usable = min(len(bit_cols), n_bits)
+    if len(bit_cols) != n_bits:
+        logger.warning(
+            "Bit count mismatch: codebook=%d, intensity=%d; using %d.",
+            len(bit_cols), n_bits, usable,
+        )
+    bit_cols = bit_cols[:usable]
+    intensity_cols = intensity_cols[:usable]
+
+    # Build mask matrix indexed by barcode_id
+    max_bid = int(codebook["barcode_id"].max())
+    mask_matrix = np.zeros((max_bid + 1, usable), dtype=bool)
+    for _, row in codebook.iterrows():
+        bid = int(row["barcode_id"])
+        mask_matrix[bid] = [bool(row[c]) for c in bit_cols]
+
+    intensities = barcodes[intensity_cols].values.astype(float)
+    bid_col = barcodes["barcode_id"].values.astype(int)
+    valid = (bid_col >= 0) & (bid_col <= max_bid)
+
+    contrast = np.full(len(barcodes), np.nan)
+    if valid.sum() == 0:
+        logger.warning("No valid barcode_id matches; skipping SNR.")
+        return None
+
+    masks = mask_matrix[bid_col[valid]]  # (n_valid, usable)
+    ints = intensities[valid]
+
+    on_count = masks.sum(axis=1).astype(float)
+    off_count = (~masks).sum(axis=1).astype(float)
+
+    on_sum = np.where(masks, ints, 0.0).sum(axis=1)
+    off_sum = np.where(~masks, ints, 0.0).sum(axis=1)
+
+    mean_on = np.divide(on_sum, on_count, where=on_count > 0,
+                        out=np.zeros_like(on_sum))
+    mean_off = np.divide(off_sum, off_count, where=off_count > 0,
+                         out=np.zeros_like(off_sum))
+
+    denom = mean_on + mean_off
+    c = np.divide(mean_on - mean_off, denom, where=denom > 0,
+                  out=np.zeros_like(denom))
+    contrast[valid] = c
+
+    valid_contrast = contrast[~np.isnan(contrast)]
+    summary = {
+        "snr_contrast_median": round(float(np.median(valid_contrast)), 4),
+        "snr_contrast_mean": round(float(np.mean(valid_contrast)), 4),
+        "snr_contrast_std": round(float(np.std(valid_contrast)), 4),
+    }
+    return contrast, summary
+
+
+def _compute_misid_rate(gene_stats: pd.DataFrame) -> float | None:
+    """Misidentification rate estimated from blank barcodes.
+
+    ``misid_rate = (blank_count / n_blank_genes) / (coding_count / n_coding_genes)``
+    """
+    blanks = gene_stats[gene_stats["is_blank"]]
+    coding = gene_stats[~gene_stats["is_blank"]]
+
+    n_blank_genes = len(blanks)
+    n_coding_genes = len(coding)
+    if n_blank_genes == 0 or n_coding_genes == 0:
+        return None
+
+    blank_count = float(blanks["count"].sum())
+    coding_count = float(coding["count"].sum())
+    if coding_count == 0:
+        return None
+
+    return round((blank_count / n_blank_genes) / (coding_count / n_coding_genes), 6)
+
+
+def _compute_per_bit_stats(
+    barcodes: pd.DataFrame,
+    codebook: pd.DataFrame,
+    intensity_cols: list[str],
+) -> pd.DataFrame | None:
+    """Per-bit intensity stats across all barcodes.
+
+    For each bit position, partitions barcodes into ON-group and OFF-group
+    using the codebook mask, then computes median intensity and contrast.
+    """
+    bit_cols = _get_bit_columns(codebook)
+    usable = min(len(bit_cols), len(intensity_cols))
+    if usable == 0:
+        return None
+
+    bit_cols = bit_cols[:usable]
+    intensity_cols = intensity_cols[:usable]
+
+    max_bid = int(codebook["barcode_id"].max())
+    mask_matrix = np.zeros((max_bid + 1, usable), dtype=bool)
+    for _, row in codebook.iterrows():
+        bid = int(row["barcode_id"])
+        mask_matrix[bid] = [bool(row[c]) for c in bit_cols]
+
+    intensities = barcodes[intensity_cols].values.astype(float)
+    bid_col = barcodes["barcode_id"].values.astype(int)
+    valid = (bid_col >= 0) & (bid_col <= max_bid)
+    masks = mask_matrix[bid_col[valid]]
+    ints = intensities[valid]
+
+    rows = []
+    for i in range(usable):
+        on_mask = masks[:, i]
+        on_vals = ints[on_mask, i]
+        off_vals = ints[~on_mask, i]
+
+        med_on = float(np.median(on_vals)) if len(on_vals) > 0 else 0.0
+        med_off = float(np.median(off_vals)) if len(off_vals) > 0 else 0.0
+        denom = med_on + med_off
+        contrast = (med_on - med_off) / denom if denom > 0 else 0.0
+
+        rows.append({
+            "bit_index": i,
+            "bit_name": bit_cols[i],
+            "median_on": round(med_on, 6),
+            "median_off": round(med_off, 6),
+            "contrast": round(contrast, 4),
+            "n_on": int(on_mask.sum()),
+            "n_off": int((~on_mask).sum()),
+        })
+    return pd.DataFrame(rows)
+
+
+def _compute_fov_misid_rate(
+    barcodes: pd.DataFrame,
+    codebook: pd.DataFrame,
+    gene_stats: pd.DataFrame,
+    fov_col: str,
+) -> pd.DataFrame:
+    """Per-FOV misidentification rate."""
+    n_blank_genes = int(gene_stats["is_blank"].sum())
+    n_coding_genes = int((~gene_stats["is_blank"]).sum())
+
+    if n_blank_genes == 0 or n_coding_genes == 0:
+        return pd.DataFrame(columns=[fov_col, "misid_rate"])
+
+    blank_ids = set(
+        codebook.loc[codebook["gene_symbol"].apply(_is_blank), "barcode_id"]
+    )
+    is_blank = barcodes["barcode_id"].isin(blank_ids)
+
+    fov_blank = is_blank.groupby(barcodes[fov_col]).sum().reset_index(
+        name="_blank_count"
+    )
+    fov_total = barcodes.groupby(fov_col).size().reset_index(name="_total")
+    fov = pd.merge(fov_blank, fov_total, on=fov_col)
+    fov["_coding_count"] = fov["_total"] - fov["_blank_count"]
+    fov["misid_rate"] = np.where(
+        fov["_coding_count"] > 0,
+        (fov["_blank_count"] / n_blank_genes)
+        / (fov["_coding_count"] / n_coding_genes),
+        np.nan,
+    )
+    fov["misid_rate"] = fov["misid_rate"].round(6)
+    return fov[[fov_col, "misid_rate"]]
+
+
+# ---------------------------------------------------------------------------
 # PlotPerformance reader
 # ---------------------------------------------------------------------------
 
@@ -253,12 +461,17 @@ def _generate_report(
     perf_df: pd.DataFrame | None,
     top_n: int,
     output_path: Path,
+    snr_contrast: np.ndarray | None = None,
+    per_bit_stats: pd.DataFrame | None = None,
 ) -> None:
     """Generate a multi-panel QC report PDF."""
     has_cells = cell_stats is not None and len(cell_stats) > 0
     has_perf = perf_df is not None and len(perf_df) > 0
+    has_snr = snr_contrast is not None
+    has_bits = per_bit_stats is not None and len(per_bit_stats) > 0
 
-    n_panels = 3 + int(has_perf) + int(has_cells) + 1  # +1 for top genes
+    n_panels = (3 + int(has_perf) + int(has_cells) + 1  # +1 for top genes
+                + int(has_snr) + int(has_bits))
     n_cols = 2
     n_rows = (n_panels + 1) // 2
 
@@ -358,6 +571,46 @@ def _generate_report(
     ax.invert_yaxis()
     ax.set_xlabel("Barcode count")
     ax.set_title(f"Top {top_n} genes")
+
+    # Panel 7: SNR contrast distribution (if available)
+    if has_snr:
+        ax = axes[panel]
+        panel += 1
+        valid_snr = snr_contrast[~np.isnan(snr_contrast)]
+        ax.hist(valid_snr, bins=60, color="steelblue", edgecolor="none")
+        med = float(np.median(valid_snr))
+        ax.axvline(med, color="red", linestyle="--", linewidth=1.5,
+                    label=f"Median={med:.3f}")
+        # Quality threshold lines
+        for thresh, clr, lbl in [
+            (0.3, "orange", "Poor<0.3"),
+            (0.5, "gold", "Marginal<0.5"),
+            (0.7, "green", "Good>0.7"),
+        ]:
+            ax.axvline(thresh, color=clr, linestyle=":", alpha=0.6, label=lbl)
+        ax.set_xlabel("ON/OFF contrast ratio")
+        ax.set_ylabel("Count")
+        ax.set_title("SNR contrast distribution")
+        ax.legend(fontsize=7, loc="upper left")
+
+    # Panel 8: Per-bit contrast bar chart (if available)
+    if has_bits:
+        ax = axes[panel]
+        panel += 1
+        contrasts = per_bit_stats["contrast"].values
+        colors = [
+            "green" if c >= 0.7 else "gold" if c >= 0.5
+            else "orange" if c >= 0.3 else "red"
+            for c in contrasts
+        ]
+        ax.bar(range(len(contrasts)), contrasts, color=colors)
+        ax.set_xticks(range(len(contrasts)))
+        ax.set_xticklabels(per_bit_stats["bit_name"].values, rotation=45,
+                           ha="right", fontsize=7)
+        ax.set_ylabel("Contrast ratio")
+        ax.set_title("Per-bit ON/OFF contrast")
+        ax.set_ylim(0, 1.05)
+        ax.axhline(0.5, color="gray", linestyle="--", alpha=0.4)
 
     # Hide unused axes
     for i in range(panel, len(axes)):
@@ -550,6 +803,52 @@ class BarcodeQCStage(PipelineStage):
             barcodes, gene_stats, fov_stats, cell_stats, perf_df, fov_col
         )
 
+        # --- SNR & error-rate metrics (optional) ---
+        snr_contrast: np.ndarray | None = None
+        per_bit_stats: pd.DataFrame | None = None
+        intensity_cols = _find_intensity_columns(barcodes)
+
+        if intensity_cols:
+            snr_result = _compute_snr_stats(barcodes, codebook, intensity_cols)
+            if snr_result is not None:
+                snr_contrast, snr_summary = snr_result
+                summary.update(snr_summary)
+                self.logger.info(
+                    "SNR contrast: median=%.4f, mean=%.4f",
+                    snr_summary["snr_contrast_median"],
+                    snr_summary["snr_contrast_mean"],
+                )
+                # Per-FOV SNR median
+                barcodes["_snr_contrast"] = snr_contrast
+                fov_snr = (
+                    barcodes.dropna(subset=["_snr_contrast"])
+                    .groupby(fov_col)["_snr_contrast"]
+                    .median()
+                    .reset_index(name="snr_contrast_median")
+                )
+                fov_stats = pd.merge(fov_stats, fov_snr, on=fov_col, how="left")
+                barcodes.drop(columns=["_snr_contrast"], inplace=True)
+
+            per_bit_stats = _compute_per_bit_stats(
+                barcodes, codebook, intensity_cols
+            )
+        else:
+            self.logger.info(
+                "No per-bit intensity columns found; skipping SNR metrics."
+            )
+
+        # Misidentification rate (uses gene_stats, not intensity columns)
+        misid = _compute_misid_rate(gene_stats)
+        if misid is not None:
+            summary["misid_rate"] = misid
+            self.logger.info("Misidentification rate: %.4f%%", misid * 100)
+            # Per-FOV misid_rate
+            fov_mr = _compute_fov_misid_rate(
+                barcodes, codebook, gene_stats, fov_col
+            )
+            if len(fov_mr) > 0:
+                fov_stats = pd.merge(fov_stats, fov_mr, on=fov_col, how="left")
+
         # Write outputs
         output_dir.mkdir(parents=True, exist_ok=True)
         output_files: list[str] = []
@@ -571,6 +870,12 @@ class BarcodeQCStage(PipelineStage):
             write_sheet(cell_stats, cell_path)
             output_files.append(str(cell_path))
 
+        if per_bit_stats is not None:
+            bit_path = output_dir / "per_bit_stats.csv"
+            write_sheet(per_bit_stats, bit_path)
+            output_files.append(str(bit_path))
+            self.logger.info("Wrote per-bit stats: %s", bit_path)
+
         # Generate PDF report
         report_path = output_dir / "qc_report.pdf"
         _generate_report(
@@ -581,6 +886,8 @@ class BarcodeQCStage(PipelineStage):
             perf_df=perf_df,
             top_n=cfg.top_n_genes,
             output_path=report_path,
+            snr_contrast=snr_contrast,
+            per_bit_stats=per_bit_stats,
         )
         output_files.append(str(report_path))
         self.logger.info("Wrote QC report: %s", report_path)
