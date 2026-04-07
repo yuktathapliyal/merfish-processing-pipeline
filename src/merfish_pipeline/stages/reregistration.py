@@ -26,6 +26,7 @@ Algorithm
 from __future__ import annotations
 
 import csv
+import logging
 import re
 import shutil
 from dataclasses import dataclass, field
@@ -37,6 +38,8 @@ import pandas as pd
 
 from merfish_pipeline.stages.base import PipelineStage, StageResult
 from merfish_pipeline.stages.registry import register_stage
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Filename / column patterns
@@ -222,12 +225,15 @@ def _build_pair_plans(
             raise ValueError(f"FOV value '{fov_raw}' is not an integer")
 
         for ir_idx, col_name in ir_cols:
-            try:
-                start_old_z = int(pd.to_numeric(row[col_name], errors="raise"))
-            except Exception as exc:
-                raise ValueError(
-                    f"Non-numeric best-focus value for FOV {fov}, {col_name}: {exc}"
+            val = pd.to_numeric(row[col_name], errors="coerce")
+            if pd.isna(val):
+                logger.warning(
+                    "Skipping FOV %d, %s: no best-focus value "
+                    "(missing from focus_qc).",
+                    fov, col_name,
                 )
+                continue
+            start_old_z = int(val)
 
             if start_old_z < 1 or start_old_z > total_z:
                 raise ValueError(

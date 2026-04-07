@@ -429,7 +429,7 @@ class FocusQCStage(PipelineStage):
         for fov in fov_list:
             row: dict[str, Any] = {"FOV": fov}
             for ir in all_irs:
-                row[f"IR{ir}"] = results[fov].get(ir, "")
+                row[f"IR{ir}"] = results[fov].get(ir, None)
             rows.append(row)
 
         df = pd.DataFrame(rows, columns=["FOV"] + ir_columns)
