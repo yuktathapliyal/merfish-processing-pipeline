@@ -26,42 +26,18 @@ Outputs
 from __future__ import annotations
 
 import logging
-import re
 from datetime import datetime
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
+from merfish_pipeline.io.codebook import is_blank, load_codebook
 from merfish_pipeline.io.sheet_io import read_sheet
 from merfish_pipeline.stages.base import PipelineStage, StageResult
 from merfish_pipeline.stages.registry import register_stage
 
 logger = logging.getLogger(__name__)
-
-_BLANK_RE = re.compile(r"^[Bb]lank[-_]?\d+$")
-
-
-def _is_blank(gene_symbol: str) -> bool:
-    return bool(_BLANK_RE.match(str(gene_symbol)))
-
-
-# ---------------------------------------------------------------------------
-# Codebook helpers (same pattern as barcode_qc / correlation)
-# ---------------------------------------------------------------------------
-
-
-def _load_codebook(codebook_path: Path) -> pd.DataFrame:
-    """Load codebook and normalise column names."""
-    cb = read_sheet(codebook_path)
-    if "barcode_id" not in cb.columns:
-        cb["barcode_id"] = cb.index
-    if "gene_symbol" not in cb.columns:
-        if "name" in cb.columns:
-            cb = cb.rename(columns={"name": "gene_symbol"})
-        elif "gene_name" in cb.columns:
-            cb = cb.rename(columns={"gene_name": "gene_symbol"})
-    return cb
 
 
 # ---------------------------------------------------------------------------
@@ -146,7 +122,7 @@ class AnnDataExportStage(PipelineStage):
                 ),
             )
 
-        codebook = _load_codebook(codebook_path)
+        codebook = load_codebook(codebook_path)
 
         # ----------------------------------------------------------
         # 2. Filter to assigned barcodes (drop background)
@@ -251,7 +227,7 @@ class AnnDataExportStage(PipelineStage):
         # 8. Gene metadata (var)
         # ----------------------------------------------------------
         gene_meta = pd.DataFrame(
-            {"is_blank": [_is_blank(g) for g in count_matrix.columns]},
+            {"is_blank": [is_blank(g) for g in count_matrix.columns]},
             index=count_matrix.columns,
         )
 

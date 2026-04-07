@@ -42,35 +42,19 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from merfish_pipeline.io.columns import (
+    FOV_CANDIDATES,
+    LOCAL_X_CANDIDATES,
+    LOCAL_Y_CANDIDATES,
+    Z_CANDIDATES,
+    detect_column,
+)
 from merfish_pipeline.io.sheet_io import read_sheet, write_sheet
 from merfish_pipeline.io.tiff_io import read_tiff
 from merfish_pipeline.stages.base import PipelineStage, StageResult
 from merfish_pipeline.stages.registry import register_stage
 
 logger = logging.getLogger(__name__)
-
-# ---------------------------------------------------------------------------
-# Column auto-detection candidates
-# ---------------------------------------------------------------------------
-
-_FOV_CANDIDATES = ["fov", "FOV", "Fov"]
-_X_CANDIDATES = ["x", "X"]
-_Y_CANDIDATES = ["y", "Y"]
-_Z_CANDIDATES = ["z", "Z", "zIndex", "z_index", "zPos", "zpos"]
-
-
-def _detect_column(df: pd.DataFrame, candidates: list[str], label: str) -> str:
-    """Return the first matching column name from *candidates*.
-
-    Raises ``ValueError`` when none of the candidates is found.
-    """
-    for c in candidates:
-        if c in df.columns:
-            return c
-    raise ValueError(
-        f"Cannot auto-detect {label} column. "
-        f"Tried {candidates}; available: {list(df.columns)}"
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -122,6 +106,12 @@ def _assign_fov(
 ) -> pd.Series:
     """Assign cell IDs for all barcodes in one FOV.
 
+    Rows with NaN coordinates (``x``/``y``, plus ``z`` for 3-D masks) are
+    skipped -- ``.astype(int)`` raises on NaN values, and we don't want a
+    handful of malformed rows to take down the whole stage.  Skipped rows
+    receive ``None`` in the returned Series via index alignment in the
+    caller.
+
     Parameters
     ----------
     df_fov:
@@ -138,13 +128,36 @@ def _assign_fov(
     Returns
     -------
     pd.Series
-        Cell ID strings (or ``None`` for background).
+        Cell ID strings indexed by ``df_fov.index``.  Background pixels and
+        rows with NaN coordinates map to ``None``.
     """
-    x_vals = df_fov[x_col].values.round().astype(int)
-    y_vals = df_fov[y_col].values.round().astype(int)
+    # Drop rows with NaN coordinates BEFORE the int cast.  For 3-D masks
+    # we additionally require a non-NaN z; for 2-D masks z is unused.
+    coord_cols = [x_col, y_col]
+    if mask.ndim == 3:
+        coord_cols.append(z_col)
+    valid = df_fov[coord_cols].notna().all(axis=1)
+    n_dropped = int((~valid).sum())
+    if n_dropped > 0:
+        logger.warning(
+            "FOV %d: dropping %d barcode row(s) with NaN coordinates.",
+            fov,
+            n_dropped,
+        )
+    df_valid = df_fov.loc[valid]
+
+    if df_valid.empty:
+        # Nothing to assign -- return an empty Series indexed by the
+        # original df_fov so the caller's loc-assignment is a no-op.
+        return pd.Series(
+            pd.array([], dtype=object), index=df_valid.index
+        )
+
+    x_vals = df_valid[x_col].values.round().astype(int)
+    y_vals = df_valid[y_col].values.round().astype(int)
 
     if mask.ndim == 3:
-        z_vals = df_fov[z_col].values.round().astype(int)
+        z_vals = df_valid[z_col].values.round().astype(int)
         max_z, max_y, max_x = mask.shape
         z_vals = np.clip(z_vals, 0, max_z - 1)
         y_vals = np.clip(y_vals, 0, max_y - 1)
@@ -165,7 +178,7 @@ def _assign_fov(
         ],
         dtype=object,
     )
-    return pd.Series(cell_ids, index=df_fov.index)
+    return pd.Series(cell_ids, index=df_valid.index)
 
 
 # ---------------------------------------------------------------------------
@@ -327,12 +340,18 @@ class CellAssignmentStage(PipelineStage):
         # 3. Detect columns
         # ----------------------------------------------------------
         try:
-            fov_col = _detect_column(barcodes_df, _FOV_CANDIDATES, "FOV")
-            x_col = _detect_column(barcodes_df, _X_CANDIDATES, "x")
-            y_col = _detect_column(barcodes_df, _Y_CANDIDATES, "y")
-            z_col = _detect_column(barcodes_df, _Z_CANDIDATES, "z")
-        except ValueError as exc:
-            return StageResult(status="failed", error=str(exc))
+            fov_col = detect_column(barcodes_df, FOV_CANDIDATES, "FOV")
+            x_col = detect_column(barcodes_df, LOCAL_X_CANDIDATES, "x")
+            y_col = detect_column(barcodes_df, LOCAL_Y_CANDIDATES, "y")
+            z_col = detect_column(barcodes_df, Z_CANDIDATES, "z")
+            barcodes_df[fov_col] = pd.to_numeric(
+                barcodes_df[fov_col], errors="raise"
+            ).astype(int)
+        except (ValueError, TypeError) as exc:
+            return StageResult(
+                status="failed",
+                error=f"Could not parse FOV column as integer: {exc}",
+            )
 
         self.logger.info(
             "Detected columns: fov=%r, x=%r, y=%r, z=%r",
@@ -341,10 +360,6 @@ class CellAssignmentStage(PipelineStage):
             y_col,
             z_col,
         )
-
-        barcodes_df[fov_col] = pd.to_numeric(
-            barcodes_df[fov_col], errors="raise"
-        ).astype(int)
 
         # ----------------------------------------------------------
         # 4. Assign cell IDs per FOV

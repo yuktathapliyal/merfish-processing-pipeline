@@ -29,34 +29,18 @@ from matplotlib.backends.backend_pdf import PdfPages
 import numpy as np
 import pandas as pd
 
+from merfish_pipeline.io.codebook import is_blank, load_codebook
+from merfish_pipeline.io.columns import (
+    LOCAL_X_CANDIDATES,
+    LOCAL_Y_CANDIDATES,
+    Z_CANDIDATES,
+    detect_column,
+)
 from merfish_pipeline.io.sheet_io import read_sheet, write_sheet
 from merfish_pipeline.stages.base import PipelineStage, StageResult
 from merfish_pipeline.stages.registry import register_stage
 
 logger = logging.getLogger(__name__)
-
-_BLANK_RE = re.compile(r"^[Bb]lank[-_]?\d+$")
-
-# Column auto-detection candidates
-_FOV_CANDIDATES = ["fov", "FOV", "Fov"]
-_Z_CANDIDATES = ["z", "Z", "zIndex", "z_index", "zPos", "zpos"]
-_X_CANDIDATES = ["x", "X"]
-_Y_CANDIDATES = ["y", "Y"]
-
-
-def _detect_column(df: pd.DataFrame, candidates: list[str], label: str) -> str:
-    """Return the first matching column name from *candidates*."""
-    for c in candidates:
-        if c in df.columns:
-            return c
-    raise ValueError(
-        f"Cannot auto-detect {label} column. "
-        f"Tried {candidates}; available: {list(df.columns)}"
-    )
-
-
-def _is_blank(gene_symbol: str) -> bool:
-    return bool(_BLANK_RE.match(str(gene_symbol)))
 
 
 def _find_intensity_columns(df: pd.DataFrame) -> list[str]:
@@ -81,24 +65,6 @@ def _get_bit_columns(codebook: pd.DataFrame) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
-# Codebook helpers (mirrors correlation.py pattern)
-# ---------------------------------------------------------------------------
-
-
-def _load_codebook(codebook_path: Path) -> pd.DataFrame:
-    """Load codebook and normalise column names."""
-    cb = read_sheet(codebook_path)
-    if "barcode_id" not in cb.columns:
-        cb["barcode_id"] = cb.index
-    if "gene_symbol" not in cb.columns:
-        if "name" in cb.columns:
-            cb = cb.rename(columns={"name": "gene_symbol"})
-        elif "gene_name" in cb.columns:
-            cb = cb.rename(columns={"gene_name": "gene_symbol"})
-    return cb
-
-
-# ---------------------------------------------------------------------------
 # Metric computation
 # ---------------------------------------------------------------------------
 
@@ -115,7 +81,7 @@ def _compute_gene_stats(
         how="left",
     )
     merged["count"] = merged["count"].fillna(0).astype(int)
-    merged["is_blank"] = merged["gene_symbol"].apply(_is_blank)
+    merged["is_blank"] = merged["gene_symbol"].apply(is_blank)
     return merged.sort_values("count", ascending=False).reset_index(drop=True)
 
 
@@ -394,11 +360,13 @@ def _compute_fov_misid_rate(
         return pd.DataFrame(columns=[fov_col, "misid_rate"])
 
     blank_ids = set(
-        codebook.loc[codebook["gene_symbol"].apply(_is_blank), "barcode_id"]
+        codebook.loc[codebook["gene_symbol"].apply(is_blank), "barcode_id"]
     )
-    is_blank = barcodes["barcode_id"].isin(blank_ids)
+    # NOTE: name this ``blank_mask`` (not ``is_blank``) to avoid shadowing
+    # the imported ``is_blank`` function from :mod:`merfish_pipeline.io.codebook`.
+    blank_mask = barcodes["barcode_id"].isin(blank_ids)
 
-    fov_blank = is_blank.groupby(barcodes[fov_col]).sum().reset_index(
+    fov_blank = blank_mask.groupby(barcodes[fov_col]).sum().reset_index(
         name="_blank_count"
     )
     fov_total = barcodes.groupby(fov_col).size().reset_index(name="_total")
@@ -775,7 +743,7 @@ class BarcodeQCStage(PipelineStage):
         barcodes = read_sheet(barcodes_path)
         self.logger.info("Loaded %d barcodes.", len(barcodes))
 
-        codebook = _load_codebook(codebook_path)
+        codebook = load_codebook(codebook_path)
 
         # Detect FOV column
         fov_col = "fov"
@@ -895,9 +863,9 @@ class BarcodeQCStage(PipelineStage):
         # Generate per-FOV spatial scatter plots
         if cfg.spatial_plots_enabled:
             try:
-                x_col = _detect_column(barcodes, _X_CANDIDATES, "x")
-                y_col = _detect_column(barcodes, _Y_CANDIDATES, "y")
-                z_col_detected = _detect_column(barcodes, _Z_CANDIDATES, "z")
+                x_col = detect_column(barcodes, LOCAL_X_CANDIDATES, "x")
+                y_col = detect_column(barcodes, LOCAL_Y_CANDIDATES, "y")
+                z_col_detected = detect_column(barcodes, Z_CANDIDATES, "z")
 
                 spatial_dir = output_dir / "spatial_plots"
                 spatial_files = _generate_spatial_plots(

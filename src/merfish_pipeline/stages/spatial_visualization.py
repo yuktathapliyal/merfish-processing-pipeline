@@ -13,47 +13,26 @@ Outputs
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
 
+from merfish_pipeline.io.codebook import load_codebook
+from merfish_pipeline.io.columns import (
+    FOV_CANDIDATES,
+    GLOBAL_X_CANDIDATES,
+    GLOBAL_Y_CANDIDATES,
+    Z_CANDIDATES,
+    detect_column,
+)
 from merfish_pipeline.io.sheet_io import read_sheet
 from merfish_pipeline.stages.base import PipelineStage, StageResult
 from merfish_pipeline.stages.registry import register_stage
 
 logger = logging.getLogger(__name__)
-
-# Column auto-detection candidates
-_GLOBAL_X_CANDIDATES = ["global_x", "x", "X"]
-_GLOBAL_Y_CANDIDATES = ["global_y", "y", "Y"]
-_Z_CANDIDATES = ["z", "Z", "zIndex", "z_index", "zPos", "zpos"]
-_FOV_CANDIDATES = ["fov", "FOV", "Fov"]
-
-
-def _detect_column(df: pd.DataFrame, candidates: list[str], label: str) -> str:
-    """Return the first matching column name from *candidates*."""
-    for c in candidates:
-        if c in df.columns:
-            return c
-    raise ValueError(
-        f"Cannot auto-detect {label} column. "
-        f"Tried {candidates}; available: {list(df.columns)}"
-    )
-
-
-def _load_codebook(codebook_path: Path) -> pd.DataFrame:
-    """Load codebook and normalise column names."""
-    cb = read_sheet(codebook_path)
-    if "barcode_id" not in cb.columns:
-        cb["barcode_id"] = cb.index
-    if "gene_symbol" not in cb.columns:
-        if "name" in cb.columns:
-            cb = cb.rename(columns={"name": "gene_symbol"})
-        elif "gene_name" in cb.columns:
-            cb = cb.rename(columns={"gene_name": "gene_symbol"})
-    return cb
 
 
 def _build_figure(
@@ -116,7 +95,11 @@ def _build_figure(
                 cid = row.get("Cell_ID")
                 gene = row.get("gene_symbol", "?")
                 if pd.notna(cid):
-                    cidx = hash(str(cid)) % len(palette)
+                    # Use a stable hash so cell colours are reproducible
+                    # across runs (Python's built-in ``hash`` is randomised
+                    # per process via ``PYTHONHASHSEED``).
+                    digest = hashlib.md5(str(cid).encode("utf-8")).hexdigest()
+                    cidx = int(digest, 16) % len(palette)
                     cell_colors.append(palette[cidx])
                     cell_sizes.append(cfg.marker_size)
                     cell_hover.append(
@@ -289,7 +272,7 @@ class SpatialVisualizationStage(PipelineStage):
         barcodes = read_sheet(barcodes_path)
         self.logger.info("Loaded %d barcodes.", len(barcodes))
 
-        codebook = _load_codebook(codebook_path)
+        codebook = load_codebook(codebook_path)
 
         # Merge gene symbols
         if "gene_symbol" not in barcodes.columns and "barcode_id" in barcodes.columns:
@@ -298,10 +281,10 @@ class SpatialVisualizationStage(PipelineStage):
 
         # Detect columns
         try:
-            x_col = _detect_column(barcodes, _GLOBAL_X_CANDIDATES, "x/global_x")
-            y_col = _detect_column(barcodes, _GLOBAL_Y_CANDIDATES, "y/global_y")
-            z_col = _detect_column(barcodes, _Z_CANDIDATES, "z")
-            fov_col = _detect_column(barcodes, _FOV_CANDIDATES, "fov")
+            x_col = detect_column(barcodes, GLOBAL_X_CANDIDATES, "x/global_x")
+            y_col = detect_column(barcodes, GLOBAL_Y_CANDIDATES, "y/global_y")
+            z_col = detect_column(barcodes, Z_CANDIDATES, "z")
+            fov_col = detect_column(barcodes, FOV_CANDIDATES, "fov")
         except ValueError as exc:
             return StageResult(status="failed", error=str(exc))
 
