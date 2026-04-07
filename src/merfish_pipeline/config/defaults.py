@@ -21,10 +21,12 @@ VALID_STAGES: list[str] = [
     "merlin_config",
     "filter_barcodes",
     "correlation",
+    "optimize_correlation",
     "segmentation",
     "cell_assignment",
     "barcode_qc",
     "anndata_export",
+    "spatial_visualization",
 ]
 
 # ---------------------------------------------------------------------------

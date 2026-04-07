@@ -170,6 +170,11 @@ def _build_template(microscope: str) -> dict:
             "enabled": False,
             "bulk_file": None,
         },
+        "optimize_correlation": {
+            "enabled": False,
+            "correlation_threshold": 0.45,
+            "n_attempts": 5,
+        },
         "segmentation": {
             "enabled": False,
             "aligned_images_dir": None,
@@ -195,11 +200,18 @@ def _build_template(microscope: str) -> dict:
         "barcode_qc": {
             "enabled": False,
             "top_n_genes": 20,
+            "spatial_plots_enabled": True,
+            "spatial_plots_columns": 3,
         },
         "anndata_export": {
             "enabled": False,
             "min_barcodes_per_cell": 0,
             "exclude_blanks": True,
+        },
+        "spatial_visualization": {
+            "enabled": False,
+            "marker_size": 2,
+            "max_points": None,
         },
         "pipeline": {
             "stages": ["index", "stitch", "focus_qc", "inspect_positions"],

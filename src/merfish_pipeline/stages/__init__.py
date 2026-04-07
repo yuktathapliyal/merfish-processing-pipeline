@@ -26,6 +26,10 @@ barcode_qc
     Post-MERlin QC report with barcode metrics and diagnostic plots.
 anndata_export
     Export cell-by-gene count matrix to AnnData h5ad format.
+optimize_correlation
+    Find gene subgroups maximizing bulk RNA-seq correlation via simulated annealing.
+spatial_visualization
+    Interactive 3D spatial scatter plot of decoded barcodes.
 """
 
 from merfish_pipeline.stages.base import PipelineStage, StageResult
@@ -47,10 +51,12 @@ from merfish_pipeline.stages.ims_convert import IMSConvertStage  # noqa: F401
 from merfish_pipeline.stages.merlin_config import MerlinConfigStage  # noqa: F401
 from merfish_pipeline.stages.filter_barcodes import FilterBarcodesStage  # noqa: F401
 from merfish_pipeline.stages.correlation import CorrelationStage  # noqa: F401
+from merfish_pipeline.stages.optimize_correlation import OptimizeCorrelationStage  # noqa: F401
 from merfish_pipeline.stages.segmentation import SegmentationStage  # noqa: F401
 from merfish_pipeline.stages.cell_assignment import CellAssignmentStage  # noqa: F401
 from merfish_pipeline.stages.barcode_qc import BarcodeQCStage  # noqa: F401
 from merfish_pipeline.stages.anndata_export import AnnDataExportStage  # noqa: F401
+from merfish_pipeline.stages.spatial_visualization import SpatialVisualizationStage  # noqa: F401
 
 __all__ = [
     "PipelineStage",

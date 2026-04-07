@@ -10,6 +10,7 @@ Outputs
 - ``{output_dir}/barcode_qc/per_gene_stats.csv``
 - ``{output_dir}/barcode_qc/per_cell_stats.csv``  (only if Cell_ID present)
 - ``{output_dir}/barcode_qc/qc_report.pdf``
+- ``{output_dir}/barcode_qc/spatial_plots/{experiment}_FOV_{NNN}.pdf``  (per-FOV)
 - ``{output_dir}/barcode_qc/run_metadata.json``
 """
 
@@ -34,6 +35,23 @@ from merfish_pipeline.stages.registry import register_stage
 logger = logging.getLogger(__name__)
 
 _BLANK_RE = re.compile(r"^[Bb]lank[-_]?\d+$")
+
+# Column auto-detection candidates
+_FOV_CANDIDATES = ["fov", "FOV", "Fov"]
+_Z_CANDIDATES = ["z", "Z", "zIndex", "z_index", "zPos", "zpos"]
+_X_CANDIDATES = ["x", "X"]
+_Y_CANDIDATES = ["y", "Y"]
+
+
+def _detect_column(df: pd.DataFrame, candidates: list[str], label: str) -> str:
+    """Return the first matching column name from *candidates*."""
+    for c in candidates:
+        if c in df.columns:
+            return c
+    raise ValueError(
+        f"Cannot auto-detect {label} column. "
+        f"Tried {candidates}; available: {list(df.columns)}"
+    )
 
 
 def _is_blank(gene_symbol: str) -> bool:
@@ -353,6 +371,96 @@ def _generate_report(
 
 
 # ---------------------------------------------------------------------------
+# Per-FOV spatial scatter plots
+# ---------------------------------------------------------------------------
+
+
+def _generate_spatial_plots(
+    barcodes: pd.DataFrame,
+    fov_col: str,
+    z_col: str,
+    x_col: str,
+    y_col: str,
+    output_dir: Path,
+    experiment_name: str,
+    n_cols: int = 3,
+) -> list[str]:
+    """Generate per-FOV spatial scatter PDFs colored by ``mean_distance``.
+
+    Each FOV gets its own PDF with a grid of subplots (one per Z-slice).
+    Returns a list of output file paths.
+    """
+    if "mean_distance" not in barcodes.columns:
+        logger.warning("Skipping spatial plots: 'mean_distance' column not found.")
+        return []
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_files: list[str] = []
+
+    # Global limits for consistent scales across FOVs
+    vmax = float(barcodes["mean_distance"].max())
+    xmax = float(barcodes[x_col].max())
+    ymax = float(barcodes[y_col].max())
+    offset = 25
+
+    all_z = sorted(barcodes[z_col].unique())
+    n_z = len(all_z)
+    n_rows = -(-n_z // n_cols)  # ceil division
+
+    for fov, df_fov in barcodes.groupby(fov_col):
+        fig, axs = plt.subplots(
+            n_rows, n_cols, figsize=(4.5 * n_cols, 4 * n_rows),
+        )
+        axs = np.asarray(axs).flatten()
+
+        for ax in axs:
+            ax.set_visible(False)
+
+        sc = None
+        z_groups = df_fov.groupby(z_col)
+
+        for z_idx, z_val in enumerate(all_z):
+            if z_idx >= len(axs):
+                break
+            ax = axs[z_idx]
+            ax.set_visible(True)
+
+            if z_val in z_groups.groups:
+                df_z = z_groups.get_group(z_val)
+                sc = ax.scatter(
+                    df_z[x_col].values,
+                    df_z[y_col].values,
+                    c=df_z["mean_distance"].values,
+                    cmap="Reds_r",
+                    vmin=0,
+                    vmax=vmax,
+                    s=3,
+                    alpha=1,
+                )
+            ax.set_xlim(-offset, xmax + offset)
+            ax.set_ylim(-offset, ymax + offset)
+            ax.set_title(f"Z slice {int(z_val) + 1}")
+            ax.set_aspect("equal", adjustable="datalim")
+
+        if sc is not None:
+            cbar = fig.colorbar(
+                sc, ax=list(axs), orientation="vertical",
+                fraction=0.02, pad=0.04,
+            )
+            cbar.set_label("Mean Distance to codebook")
+
+        fig.suptitle(f"{experiment_name} -- FOV {int(fov):03d}", fontsize=14, y=1.02)
+        fig.tight_layout()
+
+        pdf_path = output_dir / f"{experiment_name}_FOV_{int(fov):03d}.pdf"
+        fig.savefig(pdf_path, bbox_inches="tight")
+        plt.close(fig)
+        output_files.append(str(pdf_path))
+
+    return output_files
+
+
+# ---------------------------------------------------------------------------
 # Pipeline stage
 # ---------------------------------------------------------------------------
 
@@ -476,6 +584,32 @@ class BarcodeQCStage(PipelineStage):
         )
         output_files.append(str(report_path))
         self.logger.info("Wrote QC report: %s", report_path)
+
+        # Generate per-FOV spatial scatter plots
+        if cfg.spatial_plots_enabled:
+            try:
+                x_col = _detect_column(barcodes, _X_CANDIDATES, "x")
+                y_col = _detect_column(barcodes, _Y_CANDIDATES, "y")
+                z_col_detected = _detect_column(barcodes, _Z_CANDIDATES, "z")
+
+                spatial_dir = output_dir / "spatial_plots"
+                spatial_files = _generate_spatial_plots(
+                    barcodes=barcodes,
+                    fov_col=fov_col,
+                    z_col=z_col_detected,
+                    x_col=x_col,
+                    y_col=y_col,
+                    output_dir=spatial_dir,
+                    experiment_name=self.config.experiment.name,
+                    n_cols=cfg.spatial_plots_columns,
+                )
+                output_files.extend(spatial_files)
+                self.logger.info(
+                    "Generated %d spatial scatter plots in %s",
+                    len(spatial_files), spatial_dir,
+                )
+            except ValueError as exc:
+                self.logger.warning("Skipping spatial plots: %s", exc)
 
         result = StageResult(
             status="completed",

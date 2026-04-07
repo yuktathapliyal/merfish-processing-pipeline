@@ -76,8 +76,9 @@ pipeline:
   # Valid stages (in canonical order):
   #   index, stitch, focus_qc, inspect_positions, reregistration,
   #   convert, ims_convert, merlin_config, filter_barcodes,
-  #   correlation, segmentation, cell_assignment, barcode_qc,
-  #   anndata_export
+  #   correlation, optimize_correlation, segmentation,
+  #   cell_assignment, barcode_qc, anndata_export,
+  #   spatial_visualization
   #
   # Typical workflows:
   #   ONI (with reregistration): [index, stitch, focus_qc, inspect_positions, reregistration, convert, merlin_config]
@@ -132,6 +133,24 @@ correlation:
   # [OPTIONAL] Distance thresholds to evaluate.
   # distance_thresholds: [0.5167, 0.50, 0.45, 0.40, 0.35, 0.30, 0.25]
 
+optimize_correlation:
+  enabled: false
+  # [OPTIONAL] Gene group sizes to test: range(start, end+1, step).
+  # size_range_start: 5
+  # size_range_end: 120
+  # size_range_step: 5
+  # [OPTIONAL] Simulated annealing parameters.
+  # max_iterations: 2000
+  # cooling_rate: 0.995
+  # [OPTIONAL] Minimum Pearson r to accept a group.
+  # correlation_threshold: 0.45
+  # [OPTIONAL] Number of independent SA runs per size.
+  # n_attempts: 5
+  # [OPTIONAL] Which distance threshold's merged counts to use.
+  # distance_threshold: null
+  # [OPTIONAL] Random seed for reproducible results.
+  # random_seed: null
+
 segmentation:
   enabled: false
   # [REQUIRED if enabled] Directory containing MERlin's aligned_images*.tif files.
@@ -181,6 +200,10 @@ barcode_qc:
   # [OPTIONAL] Explicit barcodes file. When null, auto-detected from
   # cell_assignment, filter_barcodes, or MERlin output.
   # barcodes_file: null
+  # [OPTIONAL] Generate per-FOV spatial scatter plots colored by mean_distance.
+  spatial_plots_enabled: true
+  # [OPTIONAL] Number of columns in the Z-slice subplot grid.
+  spatial_plots_columns: 3
 
 anndata_export:
   enabled: false
@@ -191,3 +214,10 @@ anndata_export:
   # [OPTIONAL] Explicit barcodes file with Cell_ID column. When null,
   # auto-detected from cell_assignment output.
   # barcodes_file: null
+
+spatial_visualization:
+  enabled: false
+  # [OPTIONAL] Marker size for 3D scatter points.
+  # marker_size: 2
+  # [OPTIONAL] Maximum number of barcodes to plot (for performance). null = no limit.
+  # max_points: null

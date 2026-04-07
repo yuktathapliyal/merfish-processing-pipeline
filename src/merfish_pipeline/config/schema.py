@@ -199,6 +199,25 @@ class CorrelationConfig(BaseModel):
     distance_thresholds: list[float] = [0.5167, 0.50, 0.45, 0.40, 0.35, 0.30, 0.25]
 
 
+class OptimizeCorrelationConfig(BaseModel):
+    """Configuration for the optimize_correlation stage."""
+
+    model_config = {"extra": "forbid"}
+
+    enabled: bool = False
+    size_range_start: int = 5
+    size_range_end: int = 120
+    size_range_step: int = 5
+    max_iterations: int = 2000
+    initial_temperature: float = 1.0
+    cooling_rate: float = 0.995
+    correlation_threshold: float = 0.45
+    n_attempts: int = 5
+    distance_threshold: Optional[float] = None
+    bulk_expression_file: Optional[Path] = None
+    random_seed: Optional[int] = None
+
+
 class BarcodeQCConfig(BaseModel):
     """Configuration for the barcode_qc stage."""
 
@@ -207,6 +226,8 @@ class BarcodeQCConfig(BaseModel):
     enabled: bool = False
     barcodes_file: Optional[Path] = None
     top_n_genes: int = 20
+    spatial_plots_enabled: bool = True
+    spatial_plots_columns: int = 3
 
 
 class AnnDataExportConfig(BaseModel):
@@ -218,6 +239,20 @@ class AnnDataExportConfig(BaseModel):
     barcodes_file: Optional[Path] = None
     min_barcodes_per_cell: int = 0
     exclude_blanks: bool = True
+
+
+class SpatialVisualizationConfig(BaseModel):
+    """Configuration for the spatial_visualization stage."""
+
+    model_config = {"extra": "forbid"}
+
+    enabled: bool = False
+    barcodes_file: Optional[Path] = None
+    max_points: Optional[int] = None
+    marker_size: int = 2
+    unassigned_color: str = "#404040"
+    unassigned_marker_size: int = 1
+    max_fov_dropdown: int = 50
 
 
 class PipelineStagesConfig(BaseModel):
@@ -255,8 +290,10 @@ class ExperimentConfig(BaseModel):
     segmentation: SegmentationConfig = SegmentationConfig()
     cell_assignment: CellAssignmentConfig = CellAssignmentConfig()
     correlation: CorrelationConfig = CorrelationConfig()
+    optimize_correlation: OptimizeCorrelationConfig = OptimizeCorrelationConfig()
     barcode_qc: BarcodeQCConfig = BarcodeQCConfig()
     anndata_export: AnnDataExportConfig = AnnDataExportConfig()
+    spatial_visualization: SpatialVisualizationConfig = SpatialVisualizationConfig()
     pipeline: PipelineStagesConfig = PipelineStagesConfig()
 
 
@@ -322,8 +359,10 @@ class PipelineConfig(BaseModel):
     segmentation: SegmentationConfig = SegmentationConfig()
     cell_assignment: CellAssignmentConfig = CellAssignmentConfig()
     correlation: CorrelationConfig = CorrelationConfig()
+    optimize_correlation: OptimizeCorrelationConfig = OptimizeCorrelationConfig()
     barcode_qc: BarcodeQCConfig = BarcodeQCConfig()
     anndata_export: AnnDataExportConfig = AnnDataExportConfig()
+    spatial_visualization: SpatialVisualizationConfig = SpatialVisualizationConfig()
     pipeline: PipelineStagesConfig = PipelineStagesConfig()
 
     # Layer 1 -- resolved microscope settings
