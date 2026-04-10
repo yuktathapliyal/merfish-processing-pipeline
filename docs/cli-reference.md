@@ -23,7 +23,7 @@ merfish-pipe run <experiment.yaml> [OPTIONS]
 | `--force` | Re-run stages even if their outputs already exist |
 | `--profile slurm` | Submit stages as SLURM jobs instead of running locally |
 | `--workers <N>` | Override the number of parallel worker threads |
-| `--slurm` | Generate SLURM sbatch scripts with dependency chaining |
+| `--slurm` | Force SLURM mode (shortcut for `--profile slurm`) |
 | `-v` | Enable verbose (DEBUG level) logging |
 
 ### Examples

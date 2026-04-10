@@ -68,6 +68,7 @@ Raw Images --> [Pre-processing & QC] --> [Reregistration & Conversion] --> MERli
 | [Post-MERlin Stages](stages-post-merlin.md) | Stages 9--17: filter_barcodes through spatial_visualization |
 | [Workflows](workflows.md) | End-to-end examples for ONI, NIKON, and ANDOR |
 | [Understanding Your Outputs](outputs-guide.md) | What each output file contains and how to interpret it |
+| [Stage Configuration Reference](stage-config-reference.md) | Every config parameter for every stage, with types, defaults, and descriptions |
 | [CLI Reference](cli-reference.md) | All commands, flags, and examples |
 | [Troubleshooting](troubleshooting.md) | Common errors and how to fix them |
 

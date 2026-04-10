@@ -18,9 +18,9 @@ Some stages need additional packages. Install only what you need:
 
 | Extra | What it adds | When you need it | Install command |
 |-------|-------------|-----------------|----------------|
-| `segmentation` | [Cellpose](https://github.com/MouseLand/cellpose) | Cell segmentation (stage 11) | `pip install -e ".[segmentation]"` |
-| `export` | [AnnData](https://anndata.readthedocs.io/) | h5ad export for scanpy (stage 14) | `pip install -e ".[export]"` |
-| `viz` | [Plotly](https://plotly.com/python/) | Interactive trajectory plots (stage 4) | `pip install -e ".[viz]"` |
+| `segmentation` | [Cellpose](https://github.com/MouseLand/cellpose) | Cell segmentation (stage 13) | `pip install -e ".[segmentation]"` |
+| `export` | [AnnData](https://anndata.readthedocs.io/) | h5ad export for scanpy (stage 16) | `pip install -e ".[export]"` |
+| `viz` | [Plotly](https://plotly.com/python/) | Interactive plots (stages 4, 17) | `pip install -e ".[viz]"` |
 | `all` | All of the above | Full pipeline | `pip install -e ".[all]"` |
 
 ## Cellpose GPU setup

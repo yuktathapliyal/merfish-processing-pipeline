@@ -381,7 +381,7 @@ merfish-pipe run my_experiment.yaml --from-stage reregistration -v
 
 ```bash
 head -10 output_dir/reregistration/zmap_new_to_old.csv
-head -10 output_dir/reregistration/per_fov_summary.csv
+cat output_dir/reregistration/run_metadata.json   # check target_z value
 ls output_dir/remapped_data/
 ```
 
@@ -562,7 +562,7 @@ merfish-pipe run my_experiment.yaml --stage filter_barcodes -v
 
 ```bash
 head -5 output_dir/filter_barcodes/barcodes_filtered.csv
-cat output_dir/filter_barcodes/removed_summary.csv
+cat output_dir/filter_barcodes/removal_summary.txt
 ```
 
 ---
@@ -631,7 +631,7 @@ merfish-pipe run my_experiment.yaml --stage segmentation -v
 | **merlin_config** | `run_merLIN.sh` with `-o` flag, 2-col positions CSV | Template not found, `-d` flag |
 | **filter_barcodes** | `barcodes_filtered.csv` with fewer rows than input | Missing barcodes/zmap file |
 | **correlation** | `info_*.csv` with Pearson r > 0.6 | Missing bulk expression file |
-| **segmentation** | `masks/*.tiff` with uint16 cell labels | "No module named cellpose" |
+| **segmentation** | `masks/*.tiff` with cell labels (uint16 or int32) | "No module named cellpose" |
 
 ---
 
@@ -691,7 +691,7 @@ experiment:
   microscope: "andor"
 
 pipeline:
-  stages: [index, focus_qc, inspect_positions, ims_convert, merlin_config]
+  stages: [ims_convert, inspect_positions, merlin_config]
 
 raw_data:
   bead_channel_folder: "488nm, Raw"

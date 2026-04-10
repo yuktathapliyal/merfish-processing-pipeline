@@ -65,7 +65,9 @@ output_dir/
 │   ├── correlation_trend.csv
 │   ├── correlation_trend.png
 │   ├── optimal_genes.csv
-│   └── detailed_results.xlsx
+│   ├── detailed_results.xlsx
+│   ├── subgroup_correlations_unlabeled.pdf
+│   └── subgroup_correlations_labeled.pdf
 ├── joint_optimization/            (if enabled)
 │   ├── correlation_trend.csv
 │   ├── correlation_trend.png
@@ -340,6 +342,8 @@ and coloring mode.
 ### `segmentation/masks/fov_*_masks.tif`
 
 Cell segmentation masks. Pixel values: 0 = background, 1+ = cell IDs.
+Saved as `uint16` when the cell count is 65,535 or fewer, or `int32` when
+more cells are detected (to avoid label overflow).
 
 **How to view:** Open in ImageJ. Apply a color lookup table (Analyze > Color >
 "glasbey" or "16 colors") to see individual cells as different colors.

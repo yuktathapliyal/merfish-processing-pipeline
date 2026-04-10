@@ -107,6 +107,11 @@ them unless you want to override the defaults:
 | `parameters/` | MERlin parameter files (data org, positions, codebook, etc.) |
 | `logs/` | Pipeline log files |
 
+## Complete parameter reference
+
+For a full list of every configurable parameter (type, default, description)
+for every stage, see the [Stage Configuration Reference](stage-config-reference.md).
+
 ## Validate your config
 
 Before running anything, check that your config is valid:
