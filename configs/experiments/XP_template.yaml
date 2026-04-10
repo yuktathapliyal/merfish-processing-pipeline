@@ -76,8 +76,8 @@ pipeline:
   # Valid stages (in canonical order):
   #   index, stitch, focus_qc, inspect_positions, reregistration,
   #   convert, ims_convert, merlin_config, filter_barcodes,
-  #   correlation, optimize_correlation, segmentation,
-  #   cell_assignment, barcode_qc, anndata_export,
+  #   correlation, optimize_correlation, joint_optimization,
+  #   segmentation, cell_assignment, barcode_qc, anndata_export,
   #   spatial_visualization
   #
   # Typical workflows:

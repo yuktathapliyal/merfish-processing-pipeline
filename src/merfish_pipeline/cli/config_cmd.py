@@ -209,6 +209,12 @@ def _build_template(microscope: str) -> dict:
             "correlation_threshold": 0.45,
             "n_attempts": 5,
         },
+        "joint_optimization": {
+            "enabled": False,
+            "joint_experiments": [],
+            "correlation_threshold": 0.45,
+            "n_attempts": 5,
+        },
         "segmentation": {
             "enabled": False,
             "aligned_images_dir": None,
