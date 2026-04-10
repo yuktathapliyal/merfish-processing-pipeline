@@ -21,7 +21,8 @@ Algorithm
 1. Initialize a Cellpose model (model type from config, GPU preferred).
 2. Run Cellpose in 2D+stitch mode: segment each z-slice independently,
    then stitch masks across z using an overlap threshold.
-3. Save the resulting ``uint16`` mask TIFF alongside the preprocessed volume.
+3. Save the resulting mask TIFF (``uint16`` when cell count permits,
+   ``int32`` when labels exceed 65 535) alongside the preprocessed volume.
 
 **Single-slice mode** (optional):
 
@@ -278,7 +279,7 @@ def _segment_volume(
     Returns
     -------
     np.ndarray
-        3-D ``uint16`` mask array ``(Z, Y, X)`` where each unique non-zero
+        3-D ``int32`` mask array ``(Z, Y, X)`` where each unique non-zero
         value represents one segmented cell.
     """
     # Cellpose v4+ requires explicit axis parameters for 4-D input.
@@ -295,8 +296,9 @@ def _segment_volume(
         cellprob_threshold=cellprob_threshold,
     )
 
-    # Ensure output is uint16 for compact storage.
-    masks = np.asarray(masks, dtype=np.uint16)
+    # Keep int32 to avoid overflow when label count exceeds 65535.
+    # The caller down-casts to uint16 when it is safe.
+    masks = np.asarray(masks, dtype=np.int32)
     return masks
 
 
@@ -560,15 +562,27 @@ class SegmentationStage(PipelineStage):
             if single_slice_mode and masks.ndim == 3 and masks.shape[0] == 1:
                 masks = masks[0]
 
+            # Down-cast to uint16 when safe; keep int32 otherwise.
+            n_cells = int(masks.max())
+            if n_cells <= 65535:
+                masks = masks.astype(np.uint16)
+            else:
+                self.logger.warning(
+                    "%s: %d cells exceeds uint16 range (65535). "
+                    "Saving mask as int32 to preserve labels.",
+                    fov_name, n_cells,
+                )
+
             # Save mask
             mask_path = masks_dir / f"{fov_name}_masks.tif"
             write_tiff(masks, mask_path)
             output_files.append(str(mask_path))
             self.logger.info(
-                "Saved mask for %s: %d cells detected (shape %s)",
+                "Saved mask for %s: %d cells detected (shape %s, dtype %s)",
                 fov_name,
-                int(masks.max()),
+                n_cells,
                 masks.shape,
+                masks.dtype,
             )
 
             n_processed += 1
