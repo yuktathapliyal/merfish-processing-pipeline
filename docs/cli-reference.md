@@ -132,6 +132,7 @@ what each stage requires and what it auto-detects from previous stages.
 | `filter_barcodes` | MERlin completed externally | `merlin_data_dir` |
 | `correlation` | `filter_barcodes` OR MERlin + `bulk_file` | filtered barcodes if available |
 | `optimize_correlation` | `correlation` | best threshold from `info_*.csv` |
+| `joint_optimization` | `correlation` (current + all listed experiments) | best threshold from each experiment's `info_*.csv` |
 | `segmentation` | MERlin completed + `aligned_images_dir` | -- |
 | `cell_assignment` | `segmentation` + barcodes | masks dir, barcodes (filter_barcodes or MERlin) |
 | `barcode_qc` | barcodes + codebook | barcodes: `cell_assignment` > `filter_barcodes` > MERlin |

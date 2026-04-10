@@ -66,6 +66,13 @@ output_dir/
 │   ├── correlation_trend.png
 │   ├── optimal_genes.csv
 │   └── detailed_results.xlsx
+├── joint_optimization/            (if enabled)
+│   ├── correlation_trend.csv
+│   ├── correlation_trend.png
+│   ├── optimal_genes.csv
+│   ├── detailed_results.xlsx
+│   ├── subgroup_correlations_unlabeled.pdf
+│   └── subgroup_correlations_labeled.pdf
 ├── segmentation/                  (if enabled)
 │   ├── preprocessed/
 │   └── masks/
@@ -252,6 +259,57 @@ merFISH count (log-transformed), and bulk expression (log-transformed).
 
 Use this to compare against your full panel -- genes missing from this list
 may have probe issues or may not be well-expressed in this particular tissue.
+
+### `joint_optimization/correlation_trend.csv`
+
+The main results table from the multi-experiment joint optimization. Each row
+represents one group size that was tested.
+
+| Column | Meaning |
+|--------|---------|
+| `group_size` | Number of genes in the optimized subset |
+| `avg_correlation` | Average Pearson correlation across all experiments |
+| `{experiment}_r` | Per-experiment Pearson correlation (one column per experiment, named after the experiment) |
+| `{experiment}_total_counts` | Total barcode count for the genes in this subset, per experiment. Low counts mean few barcodes were detected for these genes -- a high correlation with few barcodes is less trustworthy. |
+
+**Good:** The `avg_correlation` column increases steadily with group size and
+the per-experiment columns track closely together. This means your experiments
+agree on which genes are reliable.
+
+**Bad:** The per-experiment correlations diverge widely at the same group size.
+This means the experiments disagree on which genes perform well -- the joint
+optimization is finding a compromise, not a consensus. Check whether one
+experiment has lower quality overall or whether the experiments used different
+tissue types.
+
+### `joint_optimization/correlation_trend.png`
+
+A line plot with one colored line per experiment, a bold black line for the
+average, and a red dashed line marking the correlation threshold. This is the
+joint equivalent of `optimize_correlation/correlation_trend.png`.
+
+**Good:** All lines rise together and plateau at a similar group size. The
+average line sits close to the individual experiment lines.
+
+**Bad:** One experiment's line is consistently below the others -- that
+experiment may be dragging down the joint optimization. Consider whether to
+include it.
+
+### `joint_optimization/optimal_genes.csv`
+
+The gene list for the best joint subgroup (the group size with the highest
+average correlation above the threshold). Each row is a gene, with
+per-experiment expression values and correlation scores.
+
+### `joint_optimization/subgroup_correlations_*.pdf`
+
+Two multi-page PDFs (one without gene labels, one with). Each page shows
+one group size, with side-by-side scatter panels -- one panel per experiment.
+The x-axis is log2(bulk TPM + 1) and the y-axis is log2(merFISH counts + 1).
+
+Use the labeled version to compare specific genes across experiments. A gene
+that sits on the diagonal in one experiment but is an outlier in another may
+have experiment-specific quality issues.
 
 ### `barcode_qc/spatial_plots/*.pdf`
 

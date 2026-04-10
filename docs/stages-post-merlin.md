@@ -1,4 +1,4 @@
-# Post-MERlin Analysis (Stages 9--16)
+# Post-MERlin Analysis (Stages 9--17)
 
 These stages run **after MERlin has finished decoding barcodes**. They operate
 on the `ExportBarcodes/barcodes.csv` file that MERlin produces -- a table with
@@ -149,6 +149,118 @@ optimize_correlation:
 ```
 
 **Requires:** `correlation` stage completed (reads its `merged_counts/` output).
+
+---
+
+## `joint_optimization`
+
+**What it does:** This is the multi-experiment version of `optimize_correlation`.
+Instead of finding the best gene subset for a single experiment, it finds the
+subset that works well **across all your experiments at the same time**.
+
+The idea is straightforward: a gene that correlates with bulk RNA-seq in one
+experiment might have gotten lucky. But a gene that correlates well in two, three,
+or five independent experiments is genuinely reliable. By optimizing across
+experiments jointly, you get a gene subset you can trust for future panel design.
+
+The algorithm is the same simulated annealing technique used by
+`optimize_correlation`, with one difference: instead of maximizing the Pearson
+correlation for one experiment, it maximizes the **average** Pearson correlation
+across all experiments. At each step, the optimizer proposes swapping a gene in
+or out, scores the candidate subset against every experiment, and accepts or
+rejects the swap based on the combined score.
+
+The current experiment (the one whose config you're running) is always included
+automatically. You list the other experiments in the config file by pointing to
+their `correlation` stage output directories.
+
+**When to use:**
+
+- You have processed at least two experiments through the `correlation` stage
+  and want to find genes that perform consistently across all of them.
+- You are designing a new gene panel and want to know which genes from your
+  current codebook are worth keeping.
+- You want to compare how well different experiments agree on which genes are
+  reliable.
+
+**Output:**
+
+| File | What it contains |
+|------|-----------------|
+| `joint_optimization/correlation_trend.csv` | One row per group size tested. Columns include the group size, the average correlation across experiments, the individual Pearson correlation for each experiment, and total barcode counts per experiment. This is the main results table. |
+| `joint_optimization/correlation_trend.png` | Line plot showing correlation vs group size. One colored line per experiment, a bold black line for the average, and a red dashed threshold line. If the experiment lines diverge widely, your experiments disagree on which genes are good. |
+| `joint_optimization/optimal_genes.csv` | The gene list for the best-performing group (highest average correlation above threshold). Each row has a gene name with per-experiment log-counts and log-TPM values, plus the per-experiment and average correlation. |
+| `joint_optimization/detailed_results.xlsx` | Excel workbook. The "Summary" sheet has one row per group size with average and per-experiment correlations, total barcode counts, and a comma-separated gene list. Additional sheets (one per group size) list the genes with per-experiment expression values. |
+| `joint_optimization/subgroup_correlations_unlabeled.pdf` | Multi-page PDF. Each page shows one group size, with side-by-side scatter plots for each experiment. The x-axis is bulk expression (log TPM) and the y-axis is merFISH counts (log). No gene labels -- clean view for pattern comparison. |
+| `joint_optimization/subgroup_correlations_labeled.pdf` | Same as above but with gene names annotated next to each point. Useful for identifying specific outliers across experiments. |
+| `joint_optimization/run_metadata.json` | Metadata: which experiments were included, how many common genes, best group size, SA parameters used. |
+
+**What to check:**
+
+Start with `correlation_trend.png`. The key things to look for:
+
+- **Do the per-experiment lines track together?** If they do, your experiments
+  agree on which genes are good, and the joint optimization is meaningful. If
+  one experiment's line is consistently much lower, that experiment may have
+  quality issues.
+- **Where does the average line plateau?** This tells you the effective joint
+  panel size -- adding more genes beyond this point doesn't help (and may hurt)
+  the average correlation.
+- **Does the average stay above the threshold?** If no group size meets the
+  threshold, none of your experiments have strong enough correlation, or the
+  experiments disagree too much for a shared subset to work.
+
+Open the labeled scatter PDFs to visually compare how the same gene subset
+looks in each experiment. A gene near the diagonal in one experiment but far
+off in another is a red flag -- it may have experiment-specific artefacts.
+
+Check the "Summary" sheet in the Excel workbook for the `gene_list` column.
+Genes that appear across many group sizes are consistently selected by the
+optimizer -- these are your most reliable genes.
+
+If the common gene count is much smaller than your panel size, the experiments
+may be using different codebooks or different bulk reference files. The stage
+logs the number of shared genes and how many were dropped per experiment.
+
+**Config:**
+
+```yaml
+joint_optimization:
+  enabled: true
+  joint_experiments:
+    # Point to each external experiment's correlation output folder.
+    # The stage reads info_*.csv to auto-select the best distance threshold.
+    - correlation_dir: "/path/to/XP13210/output/correlation"
+      name: "XP13210"                # optional label for plots and tables
+    - correlation_dir: "/path/to/XP12792/output/correlation"
+      name: "XP12792"
+    # If the folder structure is non-standard, point directly to the CSV:
+    # - merged_counts: "/path/to/custom/merged_counts.csv"
+    #   name: "XP99999"
+  correlation_threshold: 0.45        # minimum avg Pearson r to accept a group
+  n_attempts: 5                      # independent SA runs per size
+  # size_range_start: 5              # smallest group size to test
+  # size_range_end: 120              # largest group size to test
+  # size_range_step: 5               # step between sizes
+  # max_iterations: 2000             # SA iterations per attempt
+  # cooling_rate: 0.995              # temperature decay rate
+  # distance_threshold: null         # force a specific threshold for current experiment
+  # random_seed: null                # set for reproducible results
+```
+
+Each entry in `joint_experiments` needs at least one of:
+
+| Field | What it does |
+|-------|-------------|
+| `correlation_dir` | Path to another experiment's `correlation/` output folder. The stage looks for `info_*.csv` to find the experiment name and auto-selects the best distance threshold. |
+| `merged_counts` | Direct path to a merged-counts CSV file. Use this when the file isn't in a standard pipeline output folder, or when auto-discovery fails. |
+| `name` | Label shown in plots and table column headers. If omitted, inferred from the info CSV or filename. |
+| `distance_threshold` | Override the auto-selected threshold for this specific experiment. Useful when you know which threshold works best. |
+
+**Requires:** `correlation` stage completed for the current experiment **and**
+for every experiment listed in `joint_experiments`. All experiments must share
+at least some genes in common (the stage intersects the gene lists and warns
+you if the overlap is small).
 
 ---
 
