@@ -218,6 +218,47 @@ class OptimizeCorrelationConfig(BaseModel):
     random_seed: Optional[int] = None
 
 
+class JointExperimentEntry(BaseModel):
+    """Reference to an external experiment for joint optimization."""
+
+    model_config = {"extra": "forbid"}
+
+    name: Optional[str] = None
+    correlation_dir: Optional[Path] = None
+    merged_counts: Optional[Path] = None
+    distance_threshold: Optional[float] = None
+
+    @model_validator(mode="after")
+    def _require_correlation_dir_or_merged_counts(self) -> "JointExperimentEntry":
+        if self.correlation_dir is None and self.merged_counts is None:
+            raise ValueError(
+                "At least one of 'correlation_dir' or 'merged_counts' must be "
+                "set for each joint experiment entry."
+            )
+        return self
+
+
+class JointOptimizationConfig(BaseModel):
+    """Configuration for the joint_optimization stage."""
+
+    model_config = {"extra": "forbid"}
+
+    enabled: bool = False
+    joint_experiments: list[JointExperimentEntry] = []
+
+    # SA parameters (same defaults as optimize_correlation)
+    size_range_start: int = 5
+    size_range_end: int = 120
+    size_range_step: int = 5
+    max_iterations: int = 2000
+    initial_temperature: float = 1.0
+    cooling_rate: float = 0.995
+    correlation_threshold: float = 0.45
+    n_attempts: int = 5
+    distance_threshold: Optional[float] = None
+    random_seed: Optional[int] = None
+
+
 class BarcodeQCConfig(BaseModel):
     """Configuration for the barcode_qc stage."""
 
@@ -291,6 +332,7 @@ class ExperimentConfig(BaseModel):
     cell_assignment: CellAssignmentConfig = CellAssignmentConfig()
     correlation: CorrelationConfig = CorrelationConfig()
     optimize_correlation: OptimizeCorrelationConfig = OptimizeCorrelationConfig()
+    joint_optimization: JointOptimizationConfig = JointOptimizationConfig()
     barcode_qc: BarcodeQCConfig = BarcodeQCConfig()
     anndata_export: AnnDataExportConfig = AnnDataExportConfig()
     spatial_visualization: SpatialVisualizationConfig = SpatialVisualizationConfig()
@@ -360,6 +402,7 @@ class PipelineConfig(BaseModel):
     cell_assignment: CellAssignmentConfig = CellAssignmentConfig()
     correlation: CorrelationConfig = CorrelationConfig()
     optimize_correlation: OptimizeCorrelationConfig = OptimizeCorrelationConfig()
+    joint_optimization: JointOptimizationConfig = JointOptimizationConfig()
     barcode_qc: BarcodeQCConfig = BarcodeQCConfig()
     anndata_export: AnnDataExportConfig = AnnDataExportConfig()
     spatial_visualization: SpatialVisualizationConfig = SpatialVisualizationConfig()

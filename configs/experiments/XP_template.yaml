@@ -84,6 +84,8 @@ pipeline:
   #   ONI (with reregistration): [index, stitch, focus_qc, inspect_positions, reregistration, convert, merlin_config]
   #   Nikon:  [index, stitch, focus_qc, inspect_positions, convert, merlin_config]
   #   Andor:  [ims_convert, inspect_positions, merlin_config]
+  #   Post-MERlin: [filter_barcodes, correlation, optimize_correlation, joint_optimization,
+  #                 segmentation, cell_assignment, barcode_qc, anndata_export, spatial_visualization]
   stages: [index, stitch, focus_qc, inspect_positions]
   # [OPTIONAL] Preview mode -- log what would happen without executing.
   dry_run: false
@@ -149,6 +151,27 @@ optimize_correlation:
   # [OPTIONAL] Which distance threshold's merged counts to use.
   # distance_threshold: null
   # [OPTIONAL] Random seed for reproducible results.
+  # random_seed: null
+
+joint_optimization:
+  enabled: false
+  # [REQUIRED if enabled] Other experiments to jointly optimize with.
+  # Each entry needs the correlation output folder of a previously-run experiment.
+  # Use 'merged_counts' instead if the folder structure is non-standard.
+  # joint_experiments:
+  #   - correlation_dir: "/path/to/XP13210/output/correlation"
+  #     name: "XP13210"              # [OPTIONAL] Label for plots/tables
+  #   - correlation_dir: "/path/to/XP12792/output/correlation"
+  #     name: "XP12792"
+  #   - merged_counts: "/path/to/custom/merged_counts.csv"  # direct CSV fallback
+  #     name: "XP99999"
+  # [OPTIONAL] SA parameters (same defaults as optimize_correlation).
+  # size_range_start: 5
+  # size_range_end: 120
+  # size_range_step: 5
+  # correlation_threshold: 0.45
+  # max_iterations: 2000
+  # n_attempts: 5
   # random_seed: null
 
 segmentation:

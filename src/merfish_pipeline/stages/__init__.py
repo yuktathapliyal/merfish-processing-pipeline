@@ -28,6 +28,8 @@ anndata_export
     Export cell-by-gene count matrix to AnnData h5ad format.
 optimize_correlation
     Find gene subgroups maximizing bulk RNA-seq correlation via simulated annealing.
+joint_optimization
+    Find gene subgroups maximizing bulk correlation across multiple experiments.
 spatial_visualization
     Interactive 3D spatial scatter plot of decoded barcodes.
 """
@@ -52,6 +54,7 @@ from merfish_pipeline.stages.merlin_config import MerlinConfigStage  # noqa: F40
 from merfish_pipeline.stages.filter_barcodes import FilterBarcodesStage  # noqa: F401
 from merfish_pipeline.stages.correlation import CorrelationStage  # noqa: F401
 from merfish_pipeline.stages.optimize_correlation import OptimizeCorrelationStage  # noqa: F401
+from merfish_pipeline.stages.joint_optimization import JointOptimizationStage  # noqa: F401
 from merfish_pipeline.stages.segmentation import SegmentationStage  # noqa: F401
 from merfish_pipeline.stages.cell_assignment import CellAssignmentStage  # noqa: F401
 from merfish_pipeline.stages.barcode_qc import BarcodeQCStage  # noqa: F401
